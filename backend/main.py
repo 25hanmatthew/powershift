@@ -22,6 +22,7 @@ from .ml.runtime import enrich as enrich_historical, status as historical_status
 from .urban import UrbanRequest, discover as discover_urban, OSM_DATASET
 from .city_search import CitySearchRequest, search_city
 from .suppliers import SupplierRequest, search_suppliers
+from .assistant import ChatRequest, investigate
 
 app=FastAPI(title='PowerShift Energy Intelligence',version='1.0.0')
 logger=logging.getLogger('powershift')
@@ -59,6 +60,43 @@ async def supplier_search(request:SupplierRequest):
     except Exception:
         logger.exception('Builder discovery failed')
         raise HTTPException(502,'Builder search failed. Please retry in a moment.') from None
+
+@app.post('/api/assistant/chat')
+async def assistant_chat(request:ChatRequest):
+    if not os.getenv('OPENAI_API_KEY'):
+        raise HTTPException(503,'The assistant needs OPENAI_API_KEY configured on the server. Configure it and retry; your current map is unchanged.')
+    if not request.message.strip():
+        raise HTTPException(422,'Enter a question or planning request.')
+    async def search(query):
+        return await city_search(CitySearchRequest(query=query))
+    async def stream():
+        queue=asyncio.Queue()
+        async def run():
+            try:
+                result=await asyncio.wait_for(investigate(request,search,queue.put),timeout=300)
+                await queue.put(result)
+            except (ValueError,asyncio.TimeoutError) as exc:
+                await queue.put({'type':'error','message':str(exc) or 'This request timed out. Your previous map is unchanged; try a narrower request.'})
+            except Exception:
+                logger.warning('Assistant request failed',exc_info=False)
+                await queue.put({'type':'error','message':'The AI service is unavailable. Your previous map is unchanged. Please retry.'})
+            finally:
+                await queue.put(None)
+        task=asyncio.create_task(run())
+        try:
+            while True:
+                try:
+                    event=await asyncio.wait_for(queue.get(),timeout=15)
+                except asyncio.TimeoutError:
+                    yield ': heartbeat\n\n'
+                    continue
+                if event is None: break
+                yield 'data: '+json.dumps(event)+'\n\n'
+        finally:
+            task.cancel()
+            try: await task
+            except asyncio.CancelledError: pass
+    return StreamingResponse(stream(),media_type='text/event-stream',headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
 
 @app.post('/api/urban/search')
 async def urban_search(request:UrbanRequest):
