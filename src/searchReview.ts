@@ -1,8 +1,20 @@
 import type { Candidate, Result } from './types';
 
-export const REVIEW_STOP_MS=500;
+
 export interface ReviewStop {candidate:Candidate;excluded:boolean;label:string;facts:string[]}
 export interface SearchReview {id:string;stops:ReviewStop[]}
+
+/** Presentation pacing only; these checks use the returned measurements. */
+export function reviewSchedule(stops:ReviewStop[]) {
+ let totalMs=0;
+ const visits=stops.map((stop,index)=>{
+  const hash=[...stop.candidate.site_id].reduce((n,c)=>(n*31+c.charCodeAt(0))>>>0,index);
+  const durationMs=[350,420,500,620,760,900][hash%6];
+  const startMs=totalMs;totalMs+=durationMs;
+  return {startMs,durationMs};
+ });
+ return {visits,totalMs};
+}
 
 export function reviewStop(c:Candidate,excluded=false):ReviewStop {
  const facts:string[]=[];
@@ -14,7 +26,7 @@ export function reviewStop(c:Candidate,excluded=false):ReviewStop {
  }
  if(c.operating_evidence?.applied)facts.push(`ISD + PUDL: ${(100*(c.operating_evidence.weather_downside_share||0)).toFixed(1)}% historical wind downside`);
  else if(!excluded)facts.push(c.surface_type?'Roof structure / clearance still needs verification':`Mean slope ${c.slope_deg.toFixed(1)}° · parcel availability unverified`);
- return {candidate:c,excluded,label:excluded?'Excluded by screening':`${c.score.toFixed(1)} / 100 · passes current filters`,facts};
+ return {candidate:c,excluded,label:excluded?(c.exclusion_reasons?.[0]||'Does not meet current requirements'):`${c.score.toFixed(1)} / 100 · passes current filters`,facts};
 }
 
 /** Present measured decisions, ending on the top-ranked site. Never invent stops. */

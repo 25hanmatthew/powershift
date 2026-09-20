@@ -10,10 +10,10 @@ type Reply={type:'done';answer:string;sites:Candidate[];sources:Dataset[];follow
 type Event=Reply|{type:'status';message:string}|({type:'tool_start'|'tool_end'}&Activity)|{type:'error';message:string};
 type Message={role:'user'|'assistant';content:string;sites?:Candidate[];sources?:Dataset[];followups?:string[];activities?:Activity[];interrupted?:boolean;runId?:string};
 export type AssistantRequest={id:number;message:string};
-type Props={reviewContent?:ReactNode;incomingRequest?:AssistantRequest|null;onRunningChange?:(running:boolean)=>void;onStatusChange?:(status:string)=>void;result:Result|null;plan:Plan;selected:Candidate|null;configured:boolean|null;onResult:(result:Result)=>void;onSelect:(id:string)=>void};
+type Props={insightContent?:ReactNode;onReset?:()=>void;reviewContent?:ReactNode;incomingRequest?:AssistantRequest|null;onRunningChange?:(running:boolean)=>void;onStatusChange?:(status:string)=>void;result:Result|null;plan:Plan;selected:Candidate|null;configured:boolean|null;onResult:(result:Result)=>void;onSelect:(id:string)=>void};
 const safeSource=(url:string)=>{try{const u=new URL(url);return u.protocol==='https:'||u.protocol==='http:'?u.href:null;}catch{return null;}};
 
-export default function AssistantChat({result,plan,selected,configured,onResult,onSelect,incomingRequest,onRunningChange,onStatusChange,reviewContent}:Props){
+export default function AssistantChat({result,plan,selected,configured,onResult,onSelect,incomingRequest,onRunningChange,onStatusChange,reviewContent,onReset,insightContent}:Props){
  const [messages,setMessages]=useState<Message[]>([]),[draft,setDraft]=useState(''),[running,setRunning]=useState(false),[status,setStatus]=useState(''),[error,setError]=useState('');
  const [pendingReply,setPendingReply]=useState<Message|null>(null);
  const [activities,setActivities]=useState<Activity[]>([]);
@@ -67,7 +67,7 @@ export default function AssistantChat({result,plan,selected,configured,onResult,
  },[incomingRequest,configured,running,contextKey]);
  const suggestions=selected?[`Explain ${selected.name}'s strengths and limitations.`,'Compare this site with the highest-ranked alternative.','Prioritize grid proximity and update my shortlist.']:['Explain the current shortlist and its trade-offs.','Compare the top two sites.','Prioritize existing developed land.'];
  return <section className="assistant-chat" aria-label="PowerShift AI assistant">
-  <header className="assistant-header"><div className="assistant-eyebrow"><Sparkles size={13}/>POWERSHIFT ASSISTANT</div><div className="assistant-title"><h2>Plan with evidence.</h2><button aria-label="Start a new conversation" title="New conversation" disabled={running||Boolean(reviewContent)} onClick={()=>{setMessages([]);setError('');setDraft('');input.current?.focus();}}><RotateCcw size={16}/></button></div><p>Ask, compare, and refine your next energy project.</p></header>
+  <header className="assistant-header"><div className="assistant-eyebrow"><Sparkles size={13}/>POWERSHIFT ASSISTANT</div><div className="assistant-title"><h2>Plan with evidence.</h2><button aria-label="Start a new conversation" title="New conversation" disabled={running||Boolean(reviewContent)} onClick={()=>{generation.current++;controller.current?.abort();controller.current=null;setMessages([]);setPendingReply(null);setError('');setDraft('');setStatus('');setActivities([]);setRunning(false);onReset?.();input.current?.focus();}}><RotateCcw size={16}/></button></div><p>Ask, compare, and refine your next energy project.</p></header>
   <div className="assistant-context"><span className="live-dot"/><span>{selected?selected.name:result?.city?`${result.city.name} · ${result.candidates.length} shortlisted sites`:result?'Current screening analysis':'No analysis loaded'}</span>{result?.mode==='demo'&&<b>DEMO</b>}</div>
   <div className="assistant-conversation" role="log" aria-label="Planning conversation" aria-live="polite" aria-relevant="additions text">
    {!messages.length&&<div className="assistant-welcome"><span className="assistant-mark"><MessageSquare size={25}/></span><h3>What would you like to explore?</h3><p>I can investigate site evidence, compare options, and run a new scenario using your priorities.</p><div className="assistant-suggestions">{suggestions.map(s=><button key={s} disabled={running||Boolean(reviewContent)||configured!==true} onClick={()=>void send(s)}>{s}<ChevronRight size={14}/></button>)}</div></div>}
@@ -80,6 +80,7 @@ export default function AssistantChat({result,plan,selected,configured,onResult,
    </article>)}
    {running&&<div className="assistant-working" role="status"><LoaderCircle size={16} className="spin"/><span>{status}</span></div>}
    {activities.map(a=><div className="assistant-live-step" key={a.id}>{a.ok===undefined?<span className="live-dot"/>:a.ok?<Check size={12}/>:<span>!</span>}{a.label}{a.ok===false?' · unavailable':''}</div>)}
+   {insightContent}
    {reviewContent}
    <div ref={end}/>
   </div>

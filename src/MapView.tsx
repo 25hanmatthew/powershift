@@ -9,7 +9,8 @@ import type { SiteLayout } from './siteConcept';
 import type { createSiteLayer } from './mapSiteLayer';
 import { REGIONS } from './types';
 import { searchBounds } from './mapJourney';
-import { REVIEW_STOP_MS } from './searchReview';
+import { markerOffsets } from './markerLayout';
+import { reviewSchedule } from './searchReview';
 import type { SearchReview } from './searchReview';
 import { buildingLayer,buildingFilter,containsPoint } from './cityBuildings';
 import { installMapMouseControls } from './mapMouseControls';
@@ -31,6 +32,8 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
  const timers=useRef<ReturnType<typeof setTimeout>[]>([]);const flightActive=useRef(false);const reviewedResult=useRef('');
  const reviewCallbacks=useRef({onReviewStep,onReviewComplete});reviewCallbacks.current={onReviewStep,onReviewComplete};
 
+ const empty=!resultKey&&!busy&&region==='us';
+ const overviewBounds=()=>empty?[-125,24,-66,50] as [number,number,number,number]:searchBounds(region,polygon);
  const reduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
  const clearTimers=()=>{timers.current.forEach(clearTimeout);timers.current=[];};
  const clearReview=()=>{
@@ -42,7 +45,7 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
  useEffect(()=>{
   if(!host.current)return;
   let instance:MapInstance;
-  try {instance=new maplibregl.Map({container:host.current,bounds:searchBounds(region,polygon),fitBoundsOptions:{padding:padding(),duration:0},pitch:50,bearing:-18,minZoom:3,maxZoom:22,maxPitch:80,canvasContextAttributes:{antialias:true},attributionControl:false,
+  try {instance=new maplibregl.Map({container:host.current,bounds:overviewBounds(),fitBoundsOptions:{padding:empty?60:padding(),duration:0},pitch:empty?0:50,bearing:empty?0:-18,minZoom:2,maxZoom:22,maxPitch:80,canvasContextAttributes:{antialias:true},attributionControl:false,
    style:{version:8,light:{anchor:'viewport',color:'#fff6df',intensity:.42,position:[1.5,210,35]},sources:{
     'city-context':{type:'vector',url:'https://tiles.openfreemap.org/planet'},
     satellite:{type:'raster',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],tileSize:256,attribution:'Imagery © Esri, Maxar, Earthstar Geographics'},
@@ -95,7 +98,7 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
   return()=>{cancelled=true;if(map.current===instance&&instance.getLayer('city-building-details'))instance.removeLayer('city-building-details');};
  },[ready,buildings,viewZoom>=17]);
  useEffect(()=>{drawingRef.current=drawing;if(map.current)map.current.getCanvas().style.cursor=drawing?'crosshair':'';},[drawing]);
- const fit=()=>{equipmentSelectRef.current(null);cancelFlight();const [w,s,e,n]=searchBounds(region,polygon);map.current?.fitBounds([[w,s],[e,n]],{padding:padding(),pitch:buildings?50:0,bearing:0,duration:reduced()?0:1100});};
+ const fit=()=>{equipmentSelectRef.current(null);cancelFlight();const [w,s,e,n]=overviewBounds();map.current?.fitBounds([[w,s],[e,n]],{padding:empty?60:padding(),pitch:empty?0:buildings?50:0,bearing:0,duration:reduced()?0:1100});};
  useEffect(()=>{if(ready&&!flightActive.current&&region!==fittedRegion.current){fittedRegion.current=region;fit();}},[region,ready]);
  useEffect(()=>{if(ready&&city&&!selectedId&&!busy&&reviewedResult.current!==resultKey)fit();},[resultKey,ready,busy]);
  useEffect(()=>{
@@ -103,14 +106,15 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
   clearTimers();instance.stop();setDrawing(false);flightActive.current=true;reviewedResult.current=review.id;
   if(reduced()||!review.stops.length){flightActive.current=false;reviewCallbacks.current.onReviewComplete();return;}
   setJourneyPhase('reviewing');
+  const schedule=reviewSchedule(review.stops);
   const visit=(index:number)=>{
    const stop=review.stops[index];const c=stop.candidate;
    reviewCallbacks.current.onReviewStep(index);clearReview();
    (instance.getSource('review-site') as GeoJSONSource)?.setData({type:'FeatureCollection',features:[{type:'Feature',geometry:c.geometry as GeoJSON.Polygon,properties:{color:stop.excluded?'#deb67e':'#c6ed8c'}}]});
-   instance.flyTo({center:[c.longitude,c.latitude],zoom:c.surface_type?16:11.6,pitch:c.surface_type?40:30,bearing:[-16,12,-8,0][index%4],padding:{top:0,bottom:0,left:0,right:0},offset:[0,0],duration:350,essential:false});
+   instance.flyTo({center:[c.longitude,c.latitude],zoom:c.surface_type?16:11.6,pitch:c.surface_type?40:30,bearing:[-16,12,-8,0][index%4],padding:{top:0,bottom:0,left:0,right:0},offset:[0,0],duration:Math.min(350,schedule.visits[index].durationMs*.65),essential:false});
   };
   visit(0);
-  review.stops.slice(1).forEach((_,index)=>timers.current.push(setTimeout(()=>visit(index+1),(index+1)*REVIEW_STOP_MS)));
+  review.stops.slice(1).forEach((_,index)=>timers.current.push(setTimeout(()=>visit(index+1),schedule.visits[index+1].startMs)));
   timers.current.push(setTimeout(()=>{
    flightActive.current=false;clearReview();setJourneyPhase('idle');
    const locations=[...candidates,...(showExcluded?excluded:[]),...review.stops.map(stop=>stop.candidate)];
@@ -120,7 +124,7 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
    }
    if(!bounds.isEmpty())instance.fitBounds(bounds,{padding:window.innerWidth<721?{top:95,bottom:65,left:45,right:45}:{top:125,bottom:95,left:85,right:85},maxZoom:15,pitch:0,bearing:0,duration:reduced()?0:1100});
    reviewCallbacks.current.onReviewComplete();
-  },review.stops.length*REVIEW_STOP_MS));
+  },schedule.totalMs));
   return()=>{clearTimers();clearReview();if(flightActive.current)instance.stop();flightActive.current=false;setJourneyPhase('idle');};
  },[review?.id,ready]);
  useEffect(()=>{if(mapError&&review)reviewCallbacks.current.onReviewComplete();},[mapError,review?.id]);
@@ -139,9 +143,29 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
    button.setAttribute('aria-label',`${c.name}, ${isExcluded?'excluded':`rank ${c.rank}`}, ${c.capacity_mw} MW`);
    button.innerHTML=`<span>${isExcluded?'×':c.rank}</span>`;
    button.addEventListener('click',event=>{if(drawingRef.current)return;event.stopPropagation();cancelFlight();selectRef.current(c.id);});
-   return new maplibregl.Marker({element:button}).setLngLat([c.longitude,c.latitude]).addTo(instance);
+   const host=document.createElement('div');host.className='site-marker';
+   const connector=document.createElement('i');connector.className='site-marker-connector';connector.setAttribute('aria-hidden','true');
+   host.append(connector,button);
+   return new maplibregl.Marker({element:host}).setLngLat([c.longitude,c.latitude]).addTo(instance);
   });
   (instance.getSource('footprints') as GeoJSONSource)?.setData({type:'FeatureCollection',features:visible.map(c=>({type:'Feature',geometry:c.geometry as GeoJSON.Polygon,properties:{color:c.technology==='solar'?'#c4ec83':'#70c8e7'}}))});
+  const currentMarkers=[...markers.current];let frame=0;
+  const arrange=()=>{
+   const projected=currentMarkers.map(marker=>instance.project(marker.getLngLat()));
+   const width=instance.getContainer().clientWidth,height=instance.getContainer().clientHeight;
+   const onscreen=projected.map((point,index)=>({point,index})).filter(({point})=>point.x>=-40&&point.x<=width+40&&point.y>=-40&&point.y<=height+40);
+   const offsets=markerOffsets(onscreen.map(({point})=>point));
+   const byIndex=new Map(onscreen.map(({index},i)=>[index,offsets[i]]));
+   currentMarkers.forEach((marker,index)=>{
+    const [dx,dy]=byIndex.get(index)||[0,0];marker.setOffset([dx,dy]);
+    const line=marker.getElement().querySelector<HTMLElement>('.site-marker-connector')!;
+    line.style.width=`${Math.hypot(dx,dy)}px`;line.style.transform=`rotate(${Math.atan2(-dy,-dx)}rad)`;
+   });
+  };
+  const queue=()=>{if(frame)return;frame=requestAnimationFrame(()=>{frame=0;arrange();});};
+  instance.on('move',queue);instance.on('resize',queue);queue();
+  return()=>{cancelAnimationFrame(frame);instance.off('move',queue);instance.off('resize',queue);currentMarkers.forEach(marker=>marker.remove());};
+
  },[candidates,excluded,selectedId,ready,showExcluded,Boolean(siteLayout)]);
  useEffect(()=>{
   if(!map.current||!ready)return;
@@ -210,8 +234,8 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
   <div ref={host} className="map-canvas" aria-label="Interactive energy candidate map"/>
   <div className="map-vignette"/>
   {mapError&&<div className="map-fallback"><Satellite size={32}/><p>Interactive map unavailable</p><small>Your browser needs WebGL. Ranked sites and evidence remain available below.</small></div>}
-  <div className="map-topline"><span className="map-eyebrow"><span className="live-dot"/> {city?.scope==='regional'?'REGIONAL ENERGY WORKSPACE':'CITY ENERGY WORKSPACE'}</span><span className="coordinate-label">{Math.abs(viewCenter[1]).toFixed(2)}° {viewCenter[1]>=0?'N':'S'} / {Math.abs(viewCenter[0]).toFixed(2)}° {viewCenter[0]>=0?'E':'W'}</span></div>
-  <div className="map-title"><span>FROM ORBIT TO OPPORTUNITY</span><h2>{city?.name||REGIONS[region].short}</h2><p>{busy?'Exploring the search area…':city?.scope==='regional'?`Renewable opportunities within ${city.radius_km} km.`:'Renewable opportunities inside city limits.'}</p></div>
+  <div className="map-topline"><span className="map-eyebrow"><span className="live-dot"/> {empty?'ENERGY WORKSPACE':city?.scope==='regional'?'REGIONAL ENERGY WORKSPACE':'CITY ENERGY WORKSPACE'}</span><span className="coordinate-label">{Math.abs(viewCenter[1]).toFixed(2)}° {viewCenter[1]>=0?'N':'S'} / {Math.abs(viewCenter[0]).toFixed(2)}° {viewCenter[0]>=0?'E':'W'}</span></div>
+  <div className="map-title"><span>FROM ORBIT TO OPPORTUNITY</span><h2>{empty?'Explore renewable energy':city?.name||REGIONS[region].short}</h2><p>{empty?'Ask the assistant about a location to begin.':busy?'Exploring the search area…':city?.scope==='regional'?`Renewable opportunities within ${city.radius_km} km.`:'Renewable opportunities inside city limits.'}</p></div>
   {buildings&&buildingStatus.includes('unavailable')&&<div className="city-building-status"><Building2 size={13}/><span>{buildingStatus}</span></div>}
   <div className="map-tools">
    <button title="3D buildings" aria-label="3D buildings" aria-pressed={buildings} onClick={()=>{setBuildings(!buildings);if(!buildings)map.current?.easeTo({pitch:55,duration:reduced()?0:700});}}><Building2 size={18}/></button>

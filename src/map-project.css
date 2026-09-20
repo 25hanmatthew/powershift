@@ -51,3 +51,5 @@
 
 .sidebar-open .city-search-caption{top:24px}.map-first .map-topline{top:84px}.map-first .map-title{top:112px}.energy-options-menu{top:130px}
 @media(max-width:720px){.sidebar-open .city-search-caption{top:14px}.map-first .map-topline{top:64px}.map-first .map-title{top:87px}.energy-options-menu{top:110px}}
+
+.site-marker{width:32px;height:32px;pointer-events:none;z-index:3}.site-marker .map-pin{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:auto}.site-marker-connector{position:absolute;left:50%;top:50%;height:1px;background:#d1e7b9bb;transform-origin:0 50%;pointer-events:none;box-shadow:0 1px 2px #0008}.site-marker:has(.map-pin:hover),.site-marker:has(.map-pin.active){z-index:6}

@@ -8,7 +8,7 @@ import {REGIONAL_DEMO_PLAN} from './types';
 import type {Candidate,Result} from './types';
 import type {SearchReview} from './searchReview';
 
-vi.mock('./MapView',()=>({default:({resultKey,review,onReviewComplete}:{resultKey:string;review:SearchReview|null;onReviewComplete:()=>void})=><div data-testid="map" data-run={resultKey} data-review-count={review?.stops.length||0}><button onClick={onReviewComplete}>Complete test tour</button></div> }));
+vi.mock('./MapView',()=>({default:({resultKey,region,candidates,excluded,review,onReviewComplete}:{region:string;candidates:Candidate[];excluded:Candidate[];resultKey:string;review:SearchReview|null;onReviewComplete:()=>void})=><div data-testid="map" data-run={resultKey} data-region={region} data-sites={candidates.length+excluded.length} data-review-count={review?.stops.length||0}><button onClick={onReviewComplete}>Complete test tour</button></div> }));
 
 let host:HTMLDivElement,root:Root;
 beforeEach(()=>{
@@ -97,10 +97,10 @@ it('consumes a queued request once, but allows a deliberate repeat with a new ID
 });
 
 it('keeps the map review active after the assistant finishes, then restores the shortlist',async()=>{
- const pending=stream();services(()=>pending.response);
+ const pending=stream(),next=stream();let requests=0;const fetcher=services(()=>++requests===1?pending.response:next.response);
  await act(async()=>root.render(<App/>));
  const candidate={id:'roof',site_id:'roof',name:'Measured rooftop',technology:'solar',surface_type:'rooftop',surface_area_m2:500,longitude:-121.4,latitude:38.6,geometry:{type:'Polygon',coordinates:[]},capacity_mw:1,resource_value:5.5,resource_unit:'kWh/m²/day',grid_distance_km:1,slope_deg:2,protected_overlap_pct:0,developed_pct:100,natural_pct:0,developed_surface_verified:true,annual_gwh:2,components:{resource:80,environment:90,grid:90,buildability:80,reuse:100},confidence:'High',provenance:'computed',evidence_ids:[],limitations:[],vintage:'Fixture',land_cover:'developed',score:85,rank:1,selected:true} as Candidate;
- const result={run_id:'reviewed-agent-search',plan:REGIONAL_DEMO_PLAN,candidates:[candidate],excluded:[],selected_ids:['roof'],portfolio:{},datasets:[],verification:[],telemetry:[],mode:'live',explanation:'Measured results'} as unknown as Result;
+ const result={run_id:'reviewed-agent-search',plan:REGIONAL_DEMO_PLAN,candidates:[candidate],excluded:[],selected_ids:['roof'],portfolio:{},datasets:[],verification:[],telemetry:[],mode:'live',explanation:'Measured results',operating_evidence:{plant_count:0,complete_plants:0,investigations:[],reason:'No local observations'}} as unknown as Result;
  await act(async()=>{pending.emit({...reply,result});pending.close();});
  expect(host.querySelector('[data-testid="map"]')?.getAttribute('data-review-count')).toBe('1');
  expect(host.querySelector('#assistant-tab')?.getAttribute('aria-selected')).toBe('true');
@@ -112,6 +112,27 @@ it('keeps the map review active after the assistant finishes, then restores the 
  expect(host.querySelector('#assistant-view .assistant-site-review')).toBeNull();
  expect(host.querySelector('#sites-tab')?.getAttribute('aria-selected')).toBe('true');
  expect(host.querySelector('.site-cards')?.textContent).toContain('Measured rooftop');
+ expect(host.querySelector('#candidate-shortlist .operating-decisions')).toBeNull();
+ expect(host.querySelector('.assistant-conversation .operating-decisions')?.textContent).toContain('No local observations');
  expect(host.querySelector('.assistant-conversation')?.textContent).toContain(reply.answer);
  expect(host.querySelector('[data-testid="map"]')?.getAttribute('data-run')).toBe('reviewed-agent-search');
+ await act(async()=>(host.querySelector('[aria-label="Start a new conversation"]') as HTMLButtonElement).click());
+ expect(host.querySelector('[data-testid="map"]')?.getAttribute('data-run')).toBe('');
+ expect(host.querySelector('[data-testid="map"]')?.getAttribute('data-region')).toBe('us');
+ expect(host.querySelector('[data-testid="map"]')?.getAttribute('data-sites')).toBe('0');
+ expect(host.querySelector('.site-cards')).toBeNull();
+ expect(host.textContent).not.toContain('Measured rooftop');
+ expect(host.querySelector('.assistant-conversation')?.textContent).not.toContain(reply.answer);
+ expect(host.querySelector('#assistant-tab')?.getAttribute('aria-selected')).toBe('true');
+ expect(requests).toBe(1);
+ const input=host.querySelector('#assistant-question') as HTMLTextAreaElement;
+ await act(async()=>{
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(input,'Find solar in Boston, MA');
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+ });
+ await act(async()=>host.querySelector('.assistant-composer')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ const sent=JSON.parse((fetcher.mock.calls.filter(([url])=>url==='/api/assistant/chat').at(-1) as unknown as [string,RequestInit])[1].body as string);
+ expect(sent.run_id).toBeNull();expect(sent.selected_site_id).toBeNull();expect(sent.history).toEqual([]);
+ await act(async()=>{next.emit(reply);next.close();});
+
 });

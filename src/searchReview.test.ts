@@ -1,10 +1,22 @@
 import { describe,it,expect } from 'vitest';
-import { buildSearchReview,reviewStop } from './searchReview';
+import { buildSearchReview,reviewStop,reviewSchedule } from './searchReview';
 import type { Candidate,Result } from './types';
 
 const site=(id:string,extra:Partial<Candidate>={}):Candidate=>({id,site_id:id,name:id,longitude:-121.4,latitude:38.6,technology:'solar',surface_type:'rooftop',surface_area_m2:500,grid_distance_km:2,protected_overlap_pct:0,resource_value:5.5,resource_unit:'kWh/m²/day',slope_deg:2,score:80,exclusion_reasons:[],...extra} as Candidate);
 const result=(candidates:Candidate[],excluded:Candidate[]=[])=>({run_id:'current-search',candidates,excluded} as Result);
 describe('measured search review',()=>{
+ it('varies visit pacing with continuous, bounded scheduling',()=>{
+  const stops=Array.from({length:20},(_,i)=>reviewStop(site(`site-${i}`)));
+  const schedule=reviewSchedule(stops);
+  expect(new Set(schedule.visits.map(v=>v.durationMs)).size).toBeGreaterThan(1);
+  expect(schedule.visits[0].startMs).toBe(0);
+  schedule.visits.forEach((v,i)=>{
+   expect(v.durationMs).toBeGreaterThanOrEqual(350);expect(v.durationMs).toBeLessThanOrEqual(900);
+   if(i)expect(v.startMs).toBe(schedule.visits[i-1].startMs+schedule.visits[i-1].durationMs);
+  });
+  expect(schedule.totalMs).toBe(schedule.visits.at(-1)!.startMs+schedule.visits.at(-1)!.durationMs);
+  expect(reviewStop(site('blocked',{exclusion_reasons:['Protected land']}),true).label).toBe('Protected land');
+ });
  it('shows different viable approaches, a real rejection, then the actual leader',()=>{
   const tour=buildSearchReview(result([site('winner',{surface_type:'parking_canopy',score:90}),site('other-parking',{surface_type:'parking_canopy'}),site('roof'),site('land',{surface_type:undefined})],[site('protected',{exclusion_reasons:['Protected land'],protected_overlap_pct:3})]));
   expect(tour.stops.map(s=>s.candidate.id)).toEqual(['roof','land','other-parking','protected','winner']);
