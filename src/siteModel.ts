@@ -42,6 +42,7 @@ export function buildSiteModel(layout:SiteLayout,elevation:(x:number,z:number)=>
   if(layout.technology==='solar'){
    const count=layout.points.length;
    const panels=new THREE.InstancedMesh(new THREE.BoxGeometry(EQUIPMENT.tableWidth,.16,EQUIPMENT.tableDepth),panelMat,count);
+   panels.userData.equipment={kind:'table'};
    const frames=new THREE.InstancedMesh(new THREE.BoxGeometry(EQUIPMENT.tableWidth+.15,.2,EQUIPMENT.tableDepth+.1),steel,count);
    const posts=new THREE.InstancedMesh(new THREE.CylinderGeometry(.1,.12,2.6,5),steel,count*4);
    const transform=new THREE.Object3D();
@@ -60,13 +61,14 @@ export function buildSiteModel(layout:SiteLayout,elevation:(x:number,z:number)=>
    const bladeGeometry=new THREE.ExtrudeGeometry(bladeShape,{depth:.65,bevelEnabled:true,bevelThickness:.18,bevelSize:.15,bevelSegments:1,steps:1});
    const bladeMat=new THREE.MeshStandardMaterial({color:'#eef2e9',roughness:.42,metalness:.12});
    layout.points.forEach(([x,z],i)=>{
-    const foundation=new THREE.Mesh(new THREE.CylinderGeometry(10,11,1,24),concrete);foundation.position.set(x,.5+elevation(x,z),z);foundation.receiveShadow=true;scene.add(foundation);
-    const tower=new THREE.Mesh(towerGeometry,steel);tower.position.set(x,EQUIPMENT.hubHeight/2+elevation(x,z),z);tower.castShadow=true;scene.add(tower);
-    box(5.5,5.4,13,x,EQUIPMENT.hubHeight,z,bladeMat);
+    const tag=(object:THREE.Object3D)=>{object.userData.equipment={kind:'turbine',index:i};object.userData.equipmentBase=elevation(x,z);return object;};
+    const foundation=new THREE.Mesh(new THREE.CylinderGeometry(10,11,1,24),concrete);foundation.position.set(x,.5+elevation(x,z),z);foundation.receiveShadow=true;tag(foundation);scene.add(foundation);
+    const tower=new THREE.Mesh(towerGeometry,steel);tower.position.set(x,EQUIPMENT.hubHeight/2+elevation(x,z),z);tower.castShadow=true;tag(tower);scene.add(tower);
+    tag(box(5.5,5.4,13,x,EQUIPMENT.hubHeight,z,bladeMat));
     const rotor=new THREE.Group();rotor.position.set(x,EQUIPMENT.hubHeight+elevation(x,z),z+7.5);rotor.rotation.z=i*.63;
     const hub=new THREE.Mesh(new THREE.SphereGeometry(2.7,12,12),bladeMat);rotor.add(hub);
     for(let j=0;j<3;j++){const blade=new THREE.Mesh(bladeGeometry,bladeMat);blade.rotation.z=j*Math.PI*2/3;blade.castShadow=true;rotor.add(blade);}
-    scene.add(rotor);rotors.push(rotor);
+    tag(rotor);scene.add(rotor);rotors.push(rotor);
     box(22,.1,16,x,.1,z,roadMat);
    });
   }

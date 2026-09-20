@@ -1,0 +1,2 @@
+# Optional plotting dependency for the measured wind-insights report.
+matplotlib>=3.10,<4

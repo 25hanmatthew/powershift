@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { CustomLayerInterface,Map as MapInstance,MapSourceDataEvent } from 'maplibre-gl';
 import { buildSiteModel } from './siteModel';
 import type { SiteLayout } from './siteConcept';
+import { pickEquipment } from './equipmentSelection';
+import type { EquipmentSelection } from './equipmentSelection';
 import { terrainSampler } from './terrainSampling';
 
 export function siteLngLat(layout:SiteLayout,x:number,z:number):[number,number]{
@@ -10,6 +12,9 @@ export function siteLngLat(layout:SiteLayout,x:number,z:number):[number,number]{
 export function createSiteLayer(layout:SiteLayout,onTerrain:(message:string)=>void){
  let map:MapInstance,renderer:THREE.WebGLRenderer,model:ReturnType<typeof buildSiteModel>|undefined;
  const scene=new THREE.Scene(),camera=new THREE.Camera();
+ let rendered=false;
+ const outline=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,1,1)),new THREE.LineBasicMaterial({color:'#dcff91',depthTest:false}));
+ outline.visible=false;outline.matrixAutoUpdate=false;outline.frustumCulled=false;outline.renderOrder=100;scene.add(outline);
  scene.add(new THREE.HemisphereLight('#e8f4ff','#727759',2.1));
  const sun=new THREE.DirectionalLight('#fff2d5',3);scene.add(sun);
  const span=Math.max(layout.width,layout.depth,300);
@@ -40,7 +45,7 @@ export function createSiteLayer(layout:SiteLayout,onTerrain:(message:string)=>vo
   for(let i=0;i<vertices.count;i++)vertices.setY(i,(height(vertices.getX(i),vertices.getZ(i))??0)+.5);
   shadowGeometry.computeVertexNormals();
   const shadowGround=new THREE.Mesh(shadowGeometry,new THREE.ShadowMaterial({opacity:.24,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));
-  shadowGround.receiveShadow=true;shadowGround.frustumCulled=false;model.group.add(shadowGround);
+  shadowGround.userData.ignoreEquipmentPicking=true;shadowGround.receiveShadow=true;shadowGround.frustumCulled=false;model.group.add(shadowGround);
   scene.add(model.group);if(oldModel){scene.remove(oldModel.group);oldModel.dispose();}map.triggerRepaint();
  };
  const sourceUpdate=(event:MapSourceDataEvent)=>{if(event.sourceId==='terrain-dem'){clearTimeout(timer);timer=setTimeout(updateElevation,250);}};
@@ -56,7 +61,7 @@ export function createSiteLayer(layout:SiteLayout,onTerrain:(message:string)=>vo
    // The map owns the camera, terrain, canvas and depth buffer. No second viewport.
    const projection=new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix);
    const anchor=new THREE.Matrix4().fromArray(map.transform.getMatrixForModel(layout.center,0));
-   camera.projectionMatrix.copy(projection.multiply(anchor));camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+   rendered=true;camera.projectionMatrix.copy(projection.multiply(anchor));camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
    const a=(hour-6)/12*Math.PI;sun.position.set(Math.cos(a)*span,Math.max(.13,Math.sin(a))*span,span*.45);
    const now=performance.now(),delta=Math.min((now-previous)/1000,.06);previous=now;
    if(moving&&!matchMedia('(prefers-reduced-motion: reduce)').matches)model?.rotors.forEach(r=>r.rotation.z-=delta*.45);
@@ -72,7 +77,8 @@ export function createSiteLayer(layout:SiteLayout,onTerrain:(message:string)=>vo
    gl.bindFramebuffer(gl.FRAMEBUFFER,framebuffer);gl.viewport(viewport[0],viewport[1],viewport[2],viewport[3]);
    if(layout.technology==='wind'&&moving&&map.getZoom()>10&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches)map.triggerRepaint();
   },
-  onRemove(){disposed=true;clearTimeout(timer);clearTimeout(fallbackTimer);map.off('sourcedata',sourceUpdate);map.off('moveend',updateElevation);model?.dispose();sun.shadow.dispose();renderer?.dispose();}
+  onRemove(){disposed=true;clearTimeout(timer);clearTimeout(fallbackTimer);map.off('sourcedata',sourceUpdate);map.off('moveend',updateElevation);model?.dispose();outline.geometry.dispose();outline.material.dispose();sun.shadow.dispose();mapTarget.dispose();renderer?.dispose();}
  };
- return {layer,setLayout(value:SiteLayout){if(value===layout)return;layout=value;layoutDirty=true;map?.triggerRepaint();},setMotion(value:boolean){moving=value;map?.triggerRepaint();},setSun(value:number){hour=value;map?.triggerRepaint();}};
+ return {layer,pick(point:{x:number;y:number}){const canvas=map?.getCanvas();return model&&rendered&&canvas?pickEquipment(model.group,camera.projectionMatrixInverse,point,{width:canvas.clientWidth,height:canvas.clientHeight},layout):null;},
+  setSelection(selection:EquipmentSelection|null){outline.visible=Boolean(selection);if(selection)outline.matrix.fromArray(selection.matrix).scale(new THREE.Vector3(...selection.size).multiplyScalar(1.04));map?.triggerRepaint();},setLayout(value:SiteLayout){if(value===layout)return;layout=value;layoutDirty=true;map?.triggerRepaint();},setMotion(value:boolean){moving=value;map?.triggerRepaint();},setSun(value:number){hour=value;map?.triggerRepaint();}};
 }

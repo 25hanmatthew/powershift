@@ -61,3 +61,6 @@
 .energy-option{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:transparent;border:0;border-top:1px solid #56695844;color:#cdeb9c;padding:15px 4px;cursor:pointer}.energy-option:hover{background:#c2e69712;border-radius:8px}.energy-option>span{flex:1}.energy-option strong{display:block;font-size:13px;color:#e2ecdc;font-weight:500}.energy-option small{display:block;font-size:11px;color:#9bb09c;margin-top:4px}
 .energy-unavailable{border-top:1px solid #56695855;padding-top:12px}.energy-unavailable>span{display:grid;grid-template-columns:20px 1fr;gap:5px;color:#91a390;margin:8px 0}.energy-unavailable strong{font-size:12px;font-weight:500}.energy-unavailable small{grid-column:2;font-size:10px}.energy-unavailable p{font-size:10px;color:#8b9c89;margin-bottom:0}
 @media(max-width:700px){.energy-options-menu{top:155px}.city-search-caption{max-width:calc(100vw - 36px)}.city-search-caption>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.energy-options-trigger{font-size:9px}.live-city-pill{display:none!important}}
+
+/* Keep site panels beside the map controls so the controls stay at the right edge. */
+@media(min-width:721px){.map-first .candidates-section,.map-site-preview{right:90px}}

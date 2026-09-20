@@ -29,7 +29,7 @@ export function buildUrbanModel(layout:SiteLayout,elevation:(x:number,z:number)=
  const glass=new THREE.MeshStandardMaterial({map:texture,roughness:.34,metalness:.15});
  const steel=new THREE.MeshStandardMaterial({color:'#687780',metalness:.65,roughness:.48});
  const panels=new THREE.InstancedMesh(new THREE.BoxGeometry(1.3,.045,2.4),[edge,edge,glass,edge,edge,edge],layout.points.length);
- panels.name='PV modules';
+ panels.name='PV modules';panels.userData.equipment={kind:'module'};
  const parts:{w:number;h:number;d:number;x:number;y:number;z:number;tilt?:number}[]=[];
  const transform=new THREE.Object3D();
  for(const bay of layout.bays||[]){
