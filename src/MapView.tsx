@@ -8,12 +8,14 @@ import type { EquipmentSelection } from './equipmentSelection';
 import type { SiteLayout } from './siteConcept';
 import type { createSiteLayer } from './mapSiteLayer';
 import { REGIONS } from './types';
-import { searchBounds, surveyStops } from './mapJourney';
+import { searchBounds } from './mapJourney';
+import { REVIEW_STOP_MS } from './searchReview';
+import type { SearchReview } from './searchReview';
 import { buildingLayer,buildingFilter,containsPoint } from './cityBuildings';
 import { installMapMouseControls } from './mapMouseControls';
 
-interface Props { selectedEquipment:EquipmentSelection|null;onEquipmentSelect:(equipment:EquipmentSelection|null)=>void;city?:Result['city']; siteLayout:SiteLayout|null;modelView:'overview'|'equipment'|'plan';modelSun:number;modelMotion:boolean;candidates:Candidate[];excluded:Candidate[];selectedId:string|null;onSelect:(id:string)=>void;region:Region;polygon:Polygon|null;onPolygon:(polygon:Polygon|null)=>void;showExcluded:boolean;journey:{id:number;region:Region;polygon:Polygon|null};busy:boolean;resultKey:string;searchFailed:boolean }
-export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLayout,modelView,modelSun,modelMotion,candidates,excluded,selectedId,onSelect,region,polygon,onPolygon,showExcluded,journey,busy,resultKey,searchFailed}:Props) {
+interface Props { selectedEquipment:EquipmentSelection|null;onEquipmentSelect:(equipment:EquipmentSelection|null)=>void;city?:Result['city']; siteLayout:SiteLayout|null;modelView:'overview'|'equipment'|'plan';modelSun:number;modelMotion:boolean;candidates:Candidate[];excluded:Candidate[];selectedId:string|null;onSelect:(id:string)=>void;region:Region;polygon:Polygon|null;onPolygon:(polygon:Polygon|null)=>void;showExcluded:boolean;review:SearchReview|null;onReviewStep:(index:number)=>void;onReviewComplete:()=>void;busy:boolean;resultKey:string }
+export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLayout,modelView,modelSun,modelMotion,candidates,excluded,selectedId,onSelect,region,polygon,onPolygon,showExcluded,review,onReviewStep,onReviewComplete,busy,resultKey}:Props) {
  const host=useRef<HTMLDivElement>(null);const map=useRef<MapInstance|null>(null);const markers=useRef<maplibregl.Marker[]>([]);
  const [compact,setCompact]=useState(window.innerWidth<721);
  useEffect(()=>{const resize=()=>setCompact(window.innerWidth<721);window.addEventListener('resize',resize);return()=>window.removeEventListener('resize',resize);},[]);
@@ -26,26 +28,19 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
  const drawingRef=useRef(false); const selectRef=useRef(onSelect); selectRef.current=onSelect;
  const [viewZoom,setViewZoom]=useState(14);const [journeyPhase,setJourneyPhase]=useState('idle');const [viewCenter,setViewCenter]=useState([-120,39.4]);
  const fittedRegion=useRef(region);
- const timers=useRef<ReturnType<typeof setTimeout>[]>([]);const flightActive=useRef(false);const tourFinished=useRef(false);
- const latest=useRef({candidates,region,polygon,busy,searchFailed});latest.current={candidates,region,polygon,busy,searchFailed};
+ const timers=useRef<ReturnType<typeof setTimeout>[]>([]);const flightActive=useRef(false);const reviewedResult=useRef('');const reviewPopup=useRef<maplibregl.Popup|null>(null);
+ const reviewCallbacks=useRef({onReviewStep,onReviewComplete});reviewCallbacks.current={onReviewStep,onReviewComplete};
+ const [reviewPosition,setReviewPosition]=useState(0);
+
  const reduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
  const clearTimers=()=>{timers.current.forEach(clearTimeout);timers.current=[];};
- const cancelFlight=()=>{clearTimers();flightActive.current=false;map.current?.stop();setJourneyPhase('idle');};
- const padding=()=>window.innerWidth<721?{top:150,bottom:210,left:50,right:55}:{top:165,bottom:190,left:100,right:100};
- const settle=()=>{
-  const instance=map.current;if(!instance)return;
-  const current=latest.current;
-  if(current.busy){setJourneyPhase('waiting');return;}
-  clearTimers();flightActive.current=false;
-  const points=current.searchFailed?[]:current.candidates.filter(c=>c.selected);
-  const visible=points.length?points:current.searchFailed?[]:current.candidates;
-  const [w,s,e,n]=searchBounds(current.region,current.polygon);
-  const bounds=visible.length?new maplibregl.LngLatBounds([visible[0].longitude,visible[0].latitude],[visible[0].longitude,visible[0].latitude]):new maplibregl.LngLatBounds([w,s],[e,n]);
-  visible.forEach(c=>bounds.extend([c.longitude,c.latitude]));
-  setJourneyPhase(reduced()?'idle':'settling');
-  instance.fitBounds(bounds,{padding:padding(),maxZoom:current.candidates.some(c=>c.surface_type)?16:10,bearing:0,pitch:current.candidates.some(c=>c.surface_type)?50:0,duration:reduced()?0:1500});
-  timers.current.push(setTimeout(()=>setJourneyPhase('idle'),reduced()?0:1550));
+ const clearReview=()=>{
+  reviewPopup.current?.remove();reviewPopup.current=null;
+  const source=map.current?.getSource('review-site') as GeoJSONSource|undefined;
+  source?.setData({type:'FeatureCollection',features:[]});
  };
+ const cancelFlight=()=>{const active=flightActive.current;clearTimers();clearReview();flightActive.current=false;map.current?.stop();setJourneyPhase('idle');if(active)reviewCallbacks.current.onReviewComplete();};
+ const padding=()=>window.innerWidth<721?{top:150,bottom:210,left:50,right:55}:{top:165,bottom:190,left:100,right:100};
  useEffect(()=>{
   if(!host.current)return;
   let instance:MapInstance;
@@ -63,7 +58,7 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
   const removeMouseControls=installMapMouseControls(instance,cancelFlight);
   instance.on('moveend',()=>{setViewZoom(instance.getZoom());const center=instance.getCenter();setViewCenter([center.lng,center.lat]);});
   // Native gestures already interrupt camera flights; stop() here cancels the gesture itself.
-  const manual=(event:{originalEvent?:unknown})=>{if(event.originalEvent){clearTimers();flightActive.current=false;setJourneyPhase('idle');}};
+  const manual=(event:{originalEvent?:unknown})=>{if(event.originalEvent){const active=flightActive.current;clearTimers();clearReview();flightActive.current=false;setJourneyPhase('idle');if(active)reviewCallbacks.current.onReviewComplete();}};
   instance.on('dragstart',manual);instance.on('zoomstart',manual);instance.on('rotatestart',manual);
   instance.addControl(new maplibregl.AttributionControl({compact:true}),'bottom-right');
   instance.on('style.load',()=>{
@@ -72,6 +67,9 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
    instance.addLayer({id:'footprints-fill',type:'fill',source:'footprints',paint:{'fill-color':['get','color'],'fill-opacity':.2}});
    instance.addLayer({id:'footprints-line',type:'line',source:'footprints',paint:{'line-color':['get','color'],'line-width':1.5}});
    instance.addLayer(buildingLayer);
+   instance.addSource('review-site',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+   instance.addLayer({id:'review-site-fill',type:'fill',source:'review-site',paint:{'fill-color':['get','color'],'fill-opacity':.28}});
+   instance.addLayer({id:'review-site-line',type:'line',source:'review-site',paint:{'line-color':['get','color'],'line-width':3}});
    instance.addSource('boundary',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
    instance.addLayer({id:'boundary-fill',type:'fill',source:'boundary',paint:{'fill-color':'#c0ed91','fill-opacity':.04}});
    instance.addLayer({id:'boundary-line',type:'line',source:'boundary',paint:{'line-color':'#c0ed91','line-width':1.5,'line-dasharray':[3,3]}});
@@ -101,28 +99,40 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
  useEffect(()=>{drawingRef.current=drawing;if(map.current)map.current.getCanvas().style.cursor=drawing?'crosshair':'';},[drawing]);
  const fit=()=>{equipmentSelectRef.current(null);cancelFlight();const [w,s,e,n]=searchBounds(region,polygon);map.current?.fitBounds([[w,s],[e,n]],{padding:padding(),pitch:buildings?50:0,bearing:0,duration:reduced()?0:1100});};
  useEffect(()=>{if(ready&&!flightActive.current&&region!==fittedRegion.current){fittedRegion.current=region;fit();}},[region,ready]);
- useEffect(()=>{if(ready&&city&&!selectedId&&!busy)fit();},[resultKey,ready]);
+ useEffect(()=>{if(ready&&city&&!selectedId&&!busy&&reviewedResult.current!==resultKey)fit();},[resultKey,ready,busy]);
  useEffect(()=>{
-  const instance=map.current;if(!ready||!instance||!journey.id)return;
-  clearTimers();instance.stop();setDrawing(false);flightActive.current=true;tourFinished.current=false;
-  const stops=surveyStops(journey.region,journey.polygon);
-  const [w,s,e,n]=searchBounds(journey.region,journey.polygon);
-  const camera=instance.cameraForBounds([[w,s],[e,n]],{padding:padding()});
-  if(reduced()||!stops.length){tourFinished.current=true;settle();return;}
-  setJourneyPhase('surveying');
-  stops.forEach((center,index)=>{
-   timers.current.push(setTimeout(()=>{
-    instance.flyTo({center,zoom:Math.min(10,(camera?.zoom||6)+.8),pitch:30,bearing:[-12,9,0][index],duration:1450,essential:false});
-   },index*1700));
-  });
-  timers.current.push(setTimeout(()=>{tourFinished.current=true;settle();},stops.length*1700));
-  return ()=>{clearTimers();flightActive.current=false;instance.stop();};
- },[journey.id,ready]);
- useEffect(()=>{
-  if(!ready||!flightActive.current)return;
-  if(searchFailed){tourFinished.current=true;settle();}
-  else if(tourFinished.current&&!busy)settle();
- },[busy,resultKey,searchFailed,ready]);
+  const instance=map.current;if(!review||!ready||!instance)return;
+  clearTimers();instance.stop();setDrawing(false);flightActive.current=true;reviewedResult.current=review.id;
+  if(reduced()||!review.stops.length){flightActive.current=false;reviewCallbacks.current.onReviewComplete();return;}
+  setJourneyPhase('reviewing');
+  const visit=(index:number)=>{
+   const stop=review.stops[index];const c=stop.candidate;
+   setReviewPosition(index);reviewCallbacks.current.onReviewStep(index);clearReview();
+   (instance.getSource('review-site') as GeoJSONSource)?.setData({type:'FeatureCollection',features:[{type:'Feature',geometry:c.geometry as GeoJSON.Polygon,properties:{color:stop.excluded?'#deb67e':'#c6ed8c'}}]});
+   const card=document.createElement('div');card.setAttribute('role','status');
+   const append=(tag:string,cls:string,text:string)=>{const el=document.createElement(tag);el.className=cls;el.textContent=text;card.appendChild(el);};
+   append('span','review-bubble-label',`SITE REVIEW · ${index+1} / ${review.stops.length}`);
+   append('h3','review-bubble-title',c.name);
+   append('div','review-bubble-verdict',stop.label);
+   stop.facts.forEach(f=>append('p','review-bubble-fact',f));
+   reviewPopup.current=new maplibregl.Popup({closeButton:false,closeOnClick:false,focusAfterOpen:false,anchor:'bottom',offset:23,maxWidth:'300px',className:stop.excluded?'site-review-popup is-rejected':'site-review-popup'}).setLngLat([c.longitude,c.latitude]).setDOMContent(card).addTo(instance);
+   instance.flyTo({center:[c.longitude,c.latitude],zoom:c.surface_type?16:11.6,pitch:c.surface_type?40:30,bearing:[-16,12,-8,0][index%4],padding:{top:0,bottom:0,left:0,right:0},offset:[0,window.innerWidth<721?65:95],duration:350,essential:false});
+  };
+  visit(0);
+  review.stops.slice(1).forEach((_,index)=>timers.current.push(setTimeout(()=>visit(index+1),(index+1)*REVIEW_STOP_MS)));
+  timers.current.push(setTimeout(()=>{
+   flightActive.current=false;clearReview();setJourneyPhase('idle');
+   const locations=[...candidates,...(showExcluded?excluded:[]),...review.stops.map(stop=>stop.candidate)];
+   const bounds=new maplibregl.LngLatBounds();
+   for(const location of locations){
+    if(Number.isFinite(location.longitude)&&Number.isFinite(location.latitude))bounds.extend([location.longitude,location.latitude]);
+   }
+   if(!bounds.isEmpty())instance.fitBounds(bounds,{padding:window.innerWidth<721?{top:95,bottom:65,left:45,right:45}:{top:125,bottom:95,left:85,right:85},maxZoom:15,pitch:0,bearing:0,duration:reduced()?0:1100});
+   reviewCallbacks.current.onReviewComplete();
+  },review.stops.length*REVIEW_STOP_MS));
+  return()=>{clearTimers();clearReview();if(flightActive.current)instance.stop();flightActive.current=false;setJourneyPhase('idle');};
+ },[review?.id,ready]);
+ useEffect(()=>{if(mapError&&review)reviewCallbacks.current.onReviewComplete();},[mapError,review?.id]);
  useEffect(()=>{
   if(!selectedId||!ready||!map.current||siteLayout)return;
   const candidate=[...candidates,...excluded].find(c=>c.id===selectedId);if(!candidate)return;
@@ -137,7 +147,7 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
    button.type='button';button.className=`map-pin ${c.surface_type?'urban-pin':''} ${c.rank<=12?'priority-pin':''} ${c.technology} ${c.selected?'in-portfolio':''} ${c.id===selectedId?'active':''} ${isExcluded?'excluded':''}`;
    button.setAttribute('aria-label',`${c.name}, ${isExcluded?'excluded':`rank ${c.rank}`}, ${c.capacity_mw} MW`);
    button.innerHTML=`<span>${isExcluded?'×':c.rank}</span>`;
-   button.addEventListener('click',event=>{if(drawingRef.current)return;event.stopPropagation();selectRef.current(c.id);});
+   button.addEventListener('click',event=>{if(drawingRef.current)return;event.stopPropagation();cancelFlight();selectRef.current(c.id);});
    return new maplibregl.Marker({element:button}).setLngLat([c.longitude,c.latitude]).addTo(instance);
   });
   (instance.getSource('footprints') as GeoJSONSource)?.setData({type:'FeatureCollection',features:visible.map(c=>({type:'Feature',geometry:c.geometry as GeoJSON.Polygon,properties:{color:c.technology==='solar'?'#c4ec83':'#70c8e7'}}))});
@@ -205,13 +215,13 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
    instance.fitBounds([[w,s],[e,n]],{padding:mobile?{top:80,bottom:35,left:25,right:55}:{top:110,bottom:50,left:50,right:80},maxZoom:siteLayout.surfaceType?19:15.5,pitch:modelView==='plan'?0:60,bearing:modelView==='plan'?0:-25,duration:reduced()?0:1800});
   }
  },[siteLayout?.center[0],siteLayout?.center[1],Boolean(siteLayout),modelView,ready,compact]);
- return <div className={`map-stage ${viewZoom<16?'city-overview':''} ${journeyPhase==='surveying'?'is-surveying':''} ${siteLayout?'has-site-model':''}`} data-journey={journeyPhase}>
+ return <div className={`map-stage ${viewZoom<16?'city-overview':''} ${journeyPhase==='reviewing'?'is-reviewing':''} ${siteLayout?'has-site-model':''}`} data-journey={journeyPhase}>
   <div ref={host} className="map-canvas" aria-label="Interactive energy candidate map"/>
   <div className="map-vignette"/>
   {mapError&&<div className="map-fallback"><Satellite size={32}/><p>Interactive map unavailable</p><small>Your browser needs WebGL. Ranked sites and evidence remain available below.</small></div>}
   <div className="map-topline"><span className="map-eyebrow"><span className="live-dot"/> {city?.scope==='regional'?'REGIONAL ENERGY WORKSPACE':'CITY ENERGY WORKSPACE'}</span><span className="coordinate-label">{Math.abs(viewCenter[1]).toFixed(2)}° {viewCenter[1]>=0?'N':'S'} / {Math.abs(viewCenter[0]).toFixed(2)}° {viewCenter[0]>=0?'E':'W'}</span></div>
-  <div className="map-title"><span>FROM ORBIT TO OPPORTUNITY</span><h2>{city?.name||REGIONS[busy?journey.region:region].short}</h2><p>{busy?'Exploring the search area…':city?.scope==='regional'?`Renewable opportunities within ${city.radius_km} km.`:'Renewable opportunities inside city limits.'}</p></div>
-  {journeyPhase==='surveying'&&<><div className="survey-reticle" aria-hidden="true"><i/><i/><span/></div><div className="journey-caption"><span className="live-dot"/>Exploring the search area<button onClick={()=>{tourFinished.current=true;clearTimers();map.current?.stop();settle();}}>Skip flight <Check size={13}/></button></div></>}
+  <div className="map-title"><span>FROM ORBIT TO OPPORTUNITY</span><h2>{city?.name||REGIONS[region].short}</h2><p>{busy?'Exploring the search area…':city?.scope==='regional'?`Renewable opportunities within ${city.radius_km} km.`:'Renewable opportunities inside city limits.'}</p></div>
+  {review&&<div className="map-review-caption" role="status"><span className="live-dot"/>Reviewing site {reviewPosition+1} of {review.stops.length}<button onClick={cancelFlight}>Show results <Check size={13}/></button></div>}
   {buildings&&buildingStatus.includes('unavailable')&&<div className="city-building-status"><Building2 size={13}/><span>{buildingStatus}</span></div>}
   <div className="map-tools">
    <button title="3D buildings" aria-label="3D buildings" aria-pressed={buildings} onClick={()=>{setBuildings(!buildings);if(!buildings)map.current?.easeTo({pitch:55,duration:reduced()?0:700});}}><Building2 size={18}/></button>
