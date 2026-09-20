@@ -195,6 +195,8 @@ def test_missing_key_is_explicit_not_fake_ai(monkeypatch, saved):
 
 
 def test_provider_contract_has_strict_tools_and_output(monkeypatch, saved):
+    monkeypatch.setenv('OPENAI_MODEL', 'gpt-6-astra')
+    monkeypatch.delenv('OPENAI_CHAT_MODEL', raising=False)
     requests = []
     original = httpx.AsyncClient
     def handler(request):
@@ -203,6 +205,10 @@ def test_provider_contract_has_strict_tools_and_output(monkeypatch, saved):
     monkeypatch.setattr(assistant.httpx, 'AsyncClient', lambda **kw: original(transport=httpx.MockTransport(handler), **kw))
     asyncio.run(assistant.model_response([{'role': 'user', 'content': 'Explain.'}]))
     payload = requests[0]
+    assert payload['model'] == 'gpt-6-astra'
+    assert payload['reasoning'] == {'effort': 'low'}
+    assert payload['max_output_tokens'] == 8192
+    assert 'reasoning.encrypted_content' in payload['include']
     assert payload['store'] is False and payload['parallel_tool_calls'] is False
     assert payload['text']['format']['type'] == 'json_schema'
     for tool_spec in payload['tools']:

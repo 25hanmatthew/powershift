@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit, urljoin
 
 import httpx
+from .openai_config import openai_model, response_settings
 from pydantic import BaseModel, ConfigDict, Field
 from .cache import Cache
 
@@ -75,9 +76,9 @@ def fetch_builders(profile):
     if not key:
         raise ValueError('Builder search needs the server’s OPENAI_API_KEY. Add it to .env and restart the server.')
     payload = {
-        'model': os.getenv('OPENAI_MODEL') or 'gpt-4.1-mini', 'store': False,
+        **response_settings(openai_model(),2600), 'store': False,
         'tools': [{'type': 'web_search', 'search_context_size': 'low'}], 'tool_choice': 'required',
-        'include': ['web_search_call.action.sources'], 'max_output_tokens': 2600,
+        'include': ['web_search_call.action.sources'],
         'text': {'format': {'type': 'json_schema', 'name': 'project_builders', 'strict': True, 'schema': _SCHEMA}},
         'instructions': (
             'Find construction contractors for the exact project in the input. Use current web search. '

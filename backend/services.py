@@ -4,6 +4,7 @@ import re
 import time
 from pathlib import Path
 import httpx
+from .openai_config import openai_model, response_settings
 from .models import Plan, REGIONS
 
 REGISTRY=json.loads((Path(__file__).resolve().parent.parent/'data/datasets.json').read_text(encoding='utf-8'))
@@ -51,10 +52,10 @@ def parse_local(plan: Plan):
 
 async def openai_json(system, data):
     started=time.perf_counter()
-    model=os.getenv('OPENAI_MODEL') or 'gpt-4.1-mini'
+    model=openai_model()
     async with httpx.AsyncClient(timeout=60) as client:
         response=await client.post('https://api.openai.com/v1/responses',headers={'Authorization':f"Bearer {os.environ['OPENAI_API_KEY']}"},json={
-            'model':model, 'instructions':system,
+            **response_settings(model), 'instructions':system,
             'input':[{'role':'user','content':'Return a JSON object for this input:\n'+json.dumps(data)}],
             'text':{'format':{'type':'json_object'}},'store':False})
         response.raise_for_status()

@@ -1,8 +1,23 @@
 # PowerShift
 
-Earth-observation energy planning with a React/TypeScript workspace and a Python FastAPI analysis service.
+PowerShift is an AI-assisted renewable-energy siting platform built with React/TypeScript, MapLibre, Three.js, and Python FastAPI. It combines Earth-observation data, weather records, land-cover maps, transmission infrastructure, protected-area boundaries, mapped buildings and parking areas, and historical power-plant performance.
 
-The app includes a satellite map, solar/wind portfolio screening, text and OpenAI voice input entry, a five-step progress stream, editable priorities, geographic boundaries, hard constraints, source-level evidence, saved scenarios, GeoJSON export, and service traces.
+One OpenAI GPT-6 Astra agent interprets plain-language goals and calls tools to search, inspect, compare, and rerank sites. Geospatial screening and suitability scores are calculated in code. The app brings a ranked shortlist, on-map 3D equipment concepts, preliminary financial estimates, and project-builder discovery into one workspace. It does not claim to replace engineering, permitting, or interconnection studies.
+
+## Assistant and model configuration
+
+The assistant, planner/verifier, and builder web search default to **GPT-6 Astra (`gpt-6-astra`)** through the OpenAI Responses API. Set server-side credentials in `.env`:
+
+```dotenv
+OPENAI_API_KEY=your-key
+OPENAI_MODEL=gpt-6-astra
+# Optional assistant-only override; blank inherits OPENAI_MODEL.
+OPENAI_CHAT_MODEL=
+```
+
+Astra requests use `reasoning.effort: low` for interactive planning. Bounded assistant and builder responses allow up to 8,192 output tokens, including reasoning; this is a ceiling, not a requested answer length. Strict structured output and validated tool arguments remain in place. Conversations use `store: false`; encrypted reasoning items are carried between tool rounds within the request. Unsupported sampling parameters are not sent. Explicit model overrides remain supported, and failures do not silently switch models. Restart the backend after changing `.env`. See the [official Astra model documentation](https://developers.openai.com/api/docs/models/gpt-6-astra).
+
+Searches run from the assistant. Explicit location-based planning requests repeat the search even when that location is already loaded. Returned measurements are reviewed across up to 20 actual sites, with variable camera pacing and compact evidence-check rows in chat. The map then zooms out and opens the shortlist. These animated checks present computed results; they are not additional LLM tool calls. ISD/PUDL operating insights appear in chat. Resetting the conversation clears results, selected equipment, boundaries, and conversation context, returning to a neutral US overview. Nearby markers separate with connector lines so every site remains selectable.
 
 ## Sacramento regional demo
 
@@ -10,13 +25,13 @@ The default request is “What is the best way to increase renewable energy in S
 
 The pipeline screens the 500 largest matching mapped urban surfaces and a 7 × 7 grid of potential 2 km land cells, retaining only complete cells within the radius. It uses OSM, NASA POWER, WorldCover, ERA5, SRTM/Copernicus elevation, VIIRS, national HIFLD and PAD-US. The sidebar reports each approach's eligible count, best initial score and exclusion reasons, with eight distinct shortlisted locations by default. Scores balance resource, environment, grid proximity, buildability and land reuse; they do not optimize project economics. Land cells that overlap screened urban surfaces are excluded to prevent double-counting. Wind must meet a 5.8 m/s mean 100 m wind threshold; land cells must have no more than 5% built-up cover.
 
-The first regional request can take several minutes. Successful physical observations are cached independently for reuse; mapped surfaces refresh after seven days. External failures do not substitute synthetic data. The regional comparison is a sample, not a complete inventory of available parcels, and the existing site design, economics and builder tools remain available from the shortlist. ISD/PUDL evidence now supplies a transparent regional wind-risk preference and an existing-plant investigation queue in the same sidebar. The historical model is not used to forecast new-site generation.
+The first regional request can take several minutes. Successful physical observations are cached independently for reuse; mapped surfaces refresh after seven days. External failures do not substitute synthetic data. The regional comparison is a sample, not a complete inventory of available parcels, and the existing site design, economics and builder tools remain available from the shortlist. ISD/PUDL evidence now supplies a transparent regional wind-risk preference and an existing-plant investigation queue in the assistant conversation. The historical model is not used to forecast new-site generation.
 
 ## ISD + PUDL in the decision flow
 
-The normal search automatically joins its location to the audited 2024 ISD/PUDL study. Existing plants with at least three months more than 10 capacity-factor points below the weather-adjusted estimate become investigation actions beside the shortlist. No shortfall is credited as recoverable energy or used to reduce the requested new capacity.
+The normal search automatically joins its location to the audited 2024 ISD/PUDL study. Existing plants with at least three months more than 10 capacity-factor points below the weather-adjusted estimate become investigation actions in the assistant conversation. No shortfall is credited as recoverable energy or used to reduce the requested new capacity.
 
-For a live wind candidate, at least three spatially distinct studied plants within 100 km must have all 12 qualified months. For each plant, sum the monthly positive differences between the PUDL seasonal reference and the ISD weather-adjusted estimate, then divide by annual reference generation. The equal-plant mean is a historical downside share. The default policy multiplies the candidate's resource score by (1 - that share), then applies normal priority weights. The sidebar toggle restores unadjusted scoring instantly. This is an explicit regional planning preference, not a validated new-site prediction. Solar output, wind output and financial estimates are unchanged; missing local evidence produces no score adjustment. Hard exclusions always take precedence.
+For a live wind candidate, at least three spatially distinct studied plants within 100 km must have all 12 qualified months. For each plant, sum the monthly positive differences between the PUDL seasonal reference and the ISD weather-adjusted estimate, then divide by annual reference generation. The equal-plant mean is a historical downside share. The default policy multiplies the candidate's resource score by (1 - that share), then applies normal priority weights. The evidence toggle in chat restores unadjusted scoring instantly. This is an explicit regional planning preference, not a validated new-site prediction. Solar output, wind output and financial estimates are unchanged; missing local evidence produces no score adjustment. Hard exclusions always take precedence.
 
 `backend/operating_evidence.py` uses the audited public artifact `data/public/wind-fleet-2024.json`. `python -m scripts.export_wind_fleet` rebuilds it from the frozen study and checks source/model hashes, baselines, predictions and benchmark parity. No retraining or test-set model selection occurs. Decisions retain the policy version, matched plant IDs and model/prediction hashes. See [the Voloridge walkthrough](reports/VOLORIDGE_DEMO.md) for a demonstration and claim boundaries.
 
@@ -53,13 +68,11 @@ Then open http://127.0.0.1:8011. Restart FastAPI after the first build so it mou
 
 ## Demonstration versus live measurements
 
-The initial workspace intentionally opens in **Demonstration mode**. Its named candidate sites, physical measurements and derived portfolios are synthetic fixtures. The visible satellite basemap is real imagery but is **not** the source of those measurements. The map badge, site details, and exported metadata identify this distinction.
+The initial workspace submits the Sacramento regional request through the assistant using live providers and reusable cached observations. The "Try demo" button repeats that same live request. It is not a synthetic-data shortcut. A working OpenAI key and configured data services are needed; failures are shown explicitly.
 
-Live providers are implemented, but a complete live run requires external accounts and regional source files. No Earth Engine authentication, Elasticsearch service, OpenAI key, HIFLD file or PAD-US file is bundled. Consequently the real-data sponsor acceptance criteria cannot be certified from the default installation. No fabricated token savings or voice transcripts are supplied.
+Synthetic fixtures remain available to legacy API tests and demonstration endpoints. Their satellite basemap is real imagery, but their candidate measurements are synthetic and are labeled as such. City searches support US locations using Census boundaries; the regional mode covers a 40 km radius. Coverage depends on available source data. The older preset-based analysis API remains limited to its documented regions. Solar and wind screening are implemented; hydropower and geothermal are not yet supported.
 
-The NASA POWER public climatology endpoint has been exercised independently. This does not turn the demonstration fixtures into measured sites.
-
-Supported geography presets: northern California + Nevada, Sacramento, and eastern Washington. A custom polygon or API radius further constrains the selected preset. Named presets are documented bounding boxes, not administrative state boundaries. The local parser rejects recognized unsupported location requests and hydro/geothermal requests. With OpenAI configured in live mode, the planner additionally validates the request using OpenAI.
+No Earth Engine credentials, Elasticsearch credentials, OpenAI key, or private national source files are bundled. Resetting chat does not delete downloaded datasets or cached physical observations.
 
 ## Configure live services
 
@@ -70,7 +83,7 @@ Copy `.env.example` to `.env`, fill in the server-only configuration, and restar
 | Earth Engine | `EARTH_ENGINE_PROJECT`; run `earthengine authenticate`, or set `GOOGLE_APPLICATION_CREDENTIALS` to a service-account JSON file | Computes WorldCover fractions, SRTM slope, cloud-coverage-masked VIIRS radiance and mean hourly 100 m ERA5 wind speed. Your project must be registered for Earth Engine. |
 | Elasticsearch | `ELASTICSEARCH_URL`, `ELASTICSEARCH_API_KEY` | Creates/updates `energy_datasets` and `energy_candidates`, indexes measurements, and performs separate dataset and spatial searches. Key needs index creation/mapping, write, refresh and search permissions. |
 | Elastic semantic search | `ELASTIC_INFERENCE_ID` | An existing, compatible text embedding inference endpoint enables `semantic_text` + lexical retrieval fused with RRF. Without it, the adapter uses explicitly identified lexical search, which does not meet the hybrid-search acceptance requirement. Use an Elasticsearch version/license supporting these features. |
-| OpenAI text and voice | `OPENAI_API_KEY`, optional `OPENAI_MODEL` and `OPENAI_TRANSCRIPTION_MODEL` | Planner and verifier use the Responses API (`gpt-4.1-mini` by default). Microphone transcription uses Realtime through a backend WebSocket proxy (`gpt-4o-mini-transcribe` by default). Requires access to the configured models. |
+| OpenAI | `OPENAI_API_KEY`, optional `OPENAI_MODEL` and `OPENAI_CHAT_MODEL` | Assistant, planner/verifier, and builder search use the Responses API with `gpt-6-astra` by default. Requires API access to the configured model. Voice input is not exposed in the current UI. |
 | HIFLD | `HIFLD_GEOJSON`, `HIFLD_VINTAGE` | A regional GeoJSON FeatureCollection of transmission LineStrings/MultiLineStrings in WGS84. Default labeled vintage: 2022-10-24. |
 | PAD-US | `PADUS_GEOJSON`, `PADUS_VINTAGE` | Regional protected Polygon/MultiPolygon GeoJSON in WGS84. Default version: 4.1. All supplied protected boundaries are conservatively excluded. |
 
@@ -215,7 +228,7 @@ Tests cover hard exclusions, protected footprints, grid limits, polygon/radius v
 ## Project layout
 
 ```text
-src/                 React workspace, map, accessible dialogs, voice and instant ranking
+src/                 React workspace, assistant chat, 3D map, accessible dialogs and instant ranking
 backend/             FastAPI, deterministic scoring, geospatial analysis and adapters
 backend/tests/       Core and API acceptance tests
 data/datasets.json   Versioned evidence registry

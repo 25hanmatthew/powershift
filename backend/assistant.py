@@ -10,6 +10,7 @@ from collections import Counter
 from typing import Literal
 
 import httpx
+from .openai_config import openai_model, response_settings
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .cache import Cache
@@ -265,8 +266,8 @@ async def model_response(items, tool_choice='auto'):
     async with httpx.AsyncClient(timeout=65) as client:
         response = await client.post('https://api.openai.com/v1/responses',
             headers={'Authorization': f"Bearer {os.environ['OPENAI_API_KEY']}"},
-            json={'model': os.getenv('OPENAI_CHAT_MODEL') or os.getenv('OPENAI_MODEL') or 'gpt-4.1-mini',
-                  'instructions': INSTRUCTIONS, 'input': items, 'store': False, 'max_output_tokens': 2200,
+            json={**response_settings(openai_model(chat=True),2200),
+                  'instructions': INSTRUCTIONS, 'input': items, 'store': False, 'include': ['reasoning.encrypted_content'],
                   'parallel_tool_calls': False, 'tool_choice': tool_choice,
                   'tools': [{'type': 'function', 'name': n, 'description': d, 'parameters': strict_schema(m), 'strict': True} for n, (m, d) in TOOLS.items()],
                   'text': {'format': {'type': 'json_schema', 'name': 'energy_advice', 'strict': True, 'schema': strict_schema(Answer)}}})

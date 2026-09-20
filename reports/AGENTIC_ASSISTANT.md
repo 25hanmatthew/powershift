@@ -4,7 +4,7 @@ Implemented in the isolated `codex/llm-pipeline` worktree. This adds a tool-usin
 
 ## User flow
 
-The main search bar, initial Sacramento request, Sacramento shortcut, and Run space analysis button all submit to the sidebar conversation with explicit search intent. There is no independent browser call to the city-search endpoint. The agent uses the displayed planning preferences and invokes the existing city search as a tool; essential clarifications and failures remain in chat.
+The assistant composer is the main request entry point. The initial Sacramento request, Try demo shortcut, and Run space analysis button also submit to the same conversation. Explicit location-based discovery requests repeat the search even when the location is already loaded. There is no independent browser call to the city-search endpoint. The agent uses the displayed planning preferences and invokes the existing city search as a tool; essential clarifications and failures remain in chat.
 
 Ask a question about the current shortlist or selected site, compare sites, request a priority/constraint change, or ask for a new US city search. The assistant can chain tool calls, displays its action status, and returns an explanation with checked source links and selectable site cards. Successful scenarios update the map and planning controls together. Switching sites, changing the current analysis, or pressing Stop cancels the active conversation turn.
 
@@ -41,7 +41,7 @@ The five tools are `get_analysis`, `inspect_sites`, `compare_sites`, `rerank_sit
 
 ## Configuration and isolated development
 
-Set `OPENAI_API_KEY` in the backend environment. `OPENAI_CHAT_MODEL` optionally selects a separate chat model; otherwise it uses `OPENAI_MODEL`, then `gpt-4.1-mini`. Choose a model supporting Responses function calling and strict structured output. Credentials remain server-side. Conversation history and compact analysis evidence are sent to OpenAI with `store: false`.
+Set `OPENAI_API_KEY` in the backend environment. `OPENAI_CHAT_MODEL` optionally selects a separate chat model; otherwise it uses `OPENAI_MODEL`, then `gpt-6-astra`. Astra uses low reasoning effort and an 8,192-token output ceiling including reasoning. Overrides must support Responses function calling and strict structured output. Credentials remain server-side. Conversation history and compact analysis evidence are sent to OpenAI with `store: false`.
 
 For simultaneous development, start the API from this worktree with its own cache and port:
 
