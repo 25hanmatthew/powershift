@@ -7,7 +7,7 @@ from backend.models import Plan
 async def main():
     import uuid
     queue=asyncio.Queue();run_id=uuid.uuid4().hex
-    task=asyncio.create_task(perform(run_id,Plan(mode='live',ab_test=True),queue))
+    task=asyncio.create_task(perform(run_id,Plan(mode='live'),queue))
     while True:
         item=await queue.get()
         if item is None: break

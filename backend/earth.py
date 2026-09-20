@@ -63,7 +63,10 @@ def analyze(plan, boundary=None, technologies=None):
     region=(boundary if boundary is not None else shape(plan.polygon) if plan.polygon else box(w,s,e,n)).intersection(box(w,s,e,n))
     if region.is_empty: raise ValueError('Boundary does not intersect the selected supported region.')
     w,s,e,n=region.bounds
-    if boundary is not None:
+    if plan.region == 'us':
+        from .national_ground import local_ground
+        ground,protected=local_ground(region.bounds)
+    elif boundary is not None:
         from .urban import ground_cached, local_geometry
         ground=local_geometry(ground_cached(ground_path,'HIFLD',Path(ground_path).stat().st_mtime_ns),box(w-3,s-3,e+3,n+3))
         protected=local_geometry(ground_cached(protected_path,'PAD-US',Path(protected_path).stat().st_mtime_ns),box(w,s,e,n))
@@ -86,7 +89,13 @@ def analyze(plan, boundary=None, technologies=None):
     developed=cover.eq(50).multiply(100).rename('developed_pct')
     natural=cover.remap([10,20,30,90,95,100],[1,1,1,1,1,1],0).multiply(100).rename('natural_pct')
     incompatible=cover.remap([70,80,90,95],[1,1,1,1],0).multiply(100).rename('incompatible_pct')
-    elevation=ee.Image('USGS/SRTMGL1_003').select('elevation')
+    terrain_id='srtm'
+    if n >= 60:
+        terrain_id='copdem'
+        dem=ee.ImageCollection('COPERNICUS/DEM/GLO30_2024_1').filterBounds(features.geometry()).select('DEM')
+        elevation=dem.mosaic().setDefaultProjection(dem.first().projection())
+    else:
+        elevation=ee.Image('USGS/SRTMGL1_003').select('elevation')
     slope=ee.Terrain.slope(elevation).rename('slope_deg')
     viirs=(ee.ImageCollection('NOAA/VIIRS/DNB/MONTHLY_V1/VCMSLCFG').filterDate(plan.start_date,plan.end_date)
         .map(lambda image: image.select('avg_rad').updateMask(image.select('cf_cvg').gt(0))).mean().rename('night_radiance'))
@@ -132,10 +141,10 @@ def analyze(plan, boundary=None, technologies=None):
                 'excluded_land_cover':props['incompatible_pct']>1 or (technology=='wind' and props['developed_pct']>20),
                 'annual_gwh':round(capacity*8760*factor/1000,1),
                 'components':components((resource-3)*30 if technology=='solar' else (resource-4)*20,grid,props['slope_deg'],props['natural_pct'],props['developed_pct']),
-                'confidence':'Preliminary screening','provenance':'computed','evidence_ids':['worldcover','srtm','viirs','power' if technology=='solar' else 'era5','hifld','padus'],
+                'confidence':'Preliminary screening','provenance':'computed','evidence_ids':['worldcover',terrain_id,'viirs','power' if technology=='solar' else 'era5','hifld','padus'],
                 'vintage':f'{plan.start_date} – {plan.end_date}', 'land_cover':'WorldCover zonal fractions',
                 'metric_sources':{'resource':{'dataset':'power' if technology=='solar' else 'era5','vintage':power['vintage'] if technology=='solar' else f'{plan.start_date}/{plan.end_date}'},
-                    'slope':{'dataset':'srtm','vintage':'2000'},'land_cover':{'dataset':'worldcover','vintage':'2021'},
+                    'slope':{'dataset':terrain_id,'vintage':'2010–2020 · release 2024_1' if terrain_id=='copdem' else '2000'},'land_cover':{'dataset':'worldcover','vintage':'2021'},
                     'grid_distance':{'dataset':'hifld','vintage':os.getenv('HIFLD_VINTAGE','2022-10-24')},
                     'protected_overlap':{'dataset':'padus','vintage':os.getenv('PADUS_VINTAGE','4.1')}},
                 'limitations':['2 km screening footprint; zonal statistics sampled at 100 m.',

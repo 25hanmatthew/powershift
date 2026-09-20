@@ -27,7 +27,7 @@ def test_boundary_resolver_never_substitutes_wrong_state(tmp_path,monkeypatch):
   def raise_for_status(self):pass
   def json(self):return {'features':[{'properties':{'BASENAME':'Sacramento','STATE':'21','GEOID':'2167638'},'geometry':mapping(box(-87.27,37.41,-87.26,37.42))}]}
  monkeypatch.setattr('backend.city_search.httpx.get',lambda *a,**k:Response())
- with pytest.raises(ValueError,match='No supported city'):resolve_city('Sacramento')
+ with pytest.raises(ValueError,match='No US city'):resolve_city('Sacramento, CA')
 
 def test_boundary_repairs_provider_ring_self_intersection(tmp_path,monkeypatch):
  monkeypatch.setenv('CACHE_DIR',str(tmp_path))
@@ -46,7 +46,7 @@ def test_shortlist_capacity_and_live_route(tmp_path,monkeypatch):
  monkeypatch.setenv('CACHE_DIR',str(tmp_path))
  city={'name':'Sacramento','state':'California','geoid':'0664000','region':'sacramento','geometry':mapping(box(-122,38,-120.8,39.2)),'bounds':[-122,38,-120.8,39.2],'source_url':'https://example.test','vintage':'2026-01-01'}
  monkeypatch.setattr('backend.city_search.resolve_city',lambda name:dict(city))
- monkeypatch.setattr('backend.city_search.fetch_query',lambda *a:({'elements':[]},True))
+ monkeypatch.setattr('backend.city_search.fetch_city_surfaces',lambda *a:({'elements':[]},True))
  physical=[dict(c,provenance='computed',surface_type='rooftop',developed_surface_verified=True) for c in candidates('sacramento') if c['technology']=='solar']
  summary={'cache_hit':True,'retrieved_at':'2026-09-20T00:00:00+00:00','note':'Test observations','omitted':0,'skipped':0,'source_timestamp':'2026-09-20T00:00:00Z'}
  monkeypatch.setattr('backend.city_search.discover',lambda req,**kwargs:(physical,dict(summary)))

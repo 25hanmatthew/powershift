@@ -27,6 +27,9 @@ def analysis_key(plan):
     for key in ('HIFLD_GEOJSON','PADUS_GEOJSON'):
         p=Path(os.getenv(key, 'data/private/missing'))
         files[key]=[str(p),p.stat().st_size,p.stat().st_mtime_ns] if p.is_file() else None
+    if plan.region=='us':
+        from .national_ground import fingerprint
+        files['national']=fingerprint()
     payload={'region':plan.region,'polygon':plan.polygon,'center':plan.center,'radius':plan.radius_km,
              'dates':[plan.start_date,plan.end_date],'mode':plan.mode,'version':4,'files':files}
     return 'analysis:'+hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()

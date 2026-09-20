@@ -18,7 +18,7 @@ class Constraints(BaseModel):
 
 class Plan(BaseModel):
     query: str = Field('Find the lowest-impact way to add 250 MW in northern California and Nevada.', max_length=4000)
-    region: Literal['california-nevada', 'sacramento', 'washington'] = 'california-nevada'
+    region: Literal['california-nevada', 'sacramento', 'washington', 'us'] = 'california-nevada'
     technology: Literal['auto', 'solar', 'wind'] = 'auto'
     target_mw: float = Field(250, gt=0, le=10000)
     weights: Weights = Field(default_factory=Weights)
@@ -29,7 +29,6 @@ class Plan(BaseModel):
     mode: Literal['demo', 'live'] = 'demo'
     start_date: str = '2024-01-01'
     end_date: str = '2025-01-01'
-    ab_test: bool = False
     historical_intelligence: bool = False
 
     @model_validator(mode='after')
@@ -44,6 +43,8 @@ class Plan(BaseModel):
                 raise ValueError('Provide a valid polygon with at most 100 points.')
             if any(abs(x)>180 or abs(y)>90 for x,y in geom.exterior.coords):
                 raise ValueError('Polygon coordinates must be longitude/latitude.')
+        if self.region == 'us' and not self.polygon:
+            raise ValueError('Choose a US city or draw a local boundary before screening.')
         if self.center and (abs(self.center[0]) > 180 or abs(self.center[1]) > 90):
             raise ValueError('Center must be longitude/latitude.')
         if self.radius_km and not self.center:
@@ -58,6 +59,7 @@ class RerankRequest(BaseModel):
     technology: Literal['auto', 'solar', 'wind'] = 'auto'
 
 REGIONS = {
+    'us': {'name': 'United States', 'bounds': [-180, 18, 180, 72]},
     'california-nevada': {'name': 'Northern California + Nevada', 'bounds': [-123.0, 37.3, -117.0, 41.5]},
     'sacramento': {'name': 'Sacramento region', 'bounds': [-122.0, 38.0, -120.8, 39.2]},
     'washington': {'name': 'Eastern Washington', 'bounds': [-120.4, 45.7, -117.0, 48.5]},

@@ -8,4 +8,6 @@ shapely>=2.0,<3
 pyproj>=3.7,<4
 websockets>=14,<16
 pytest>=8,<9
-the-token-company==0.5.1
+
+# Spatial queries against national HIFLD / PAD-US archives.
+pyogrio>=0.10,<1

@@ -138,12 +138,17 @@ def discover(request:UrbanRequest, supplied=None, city_boundary=None):
     choices=[c for c in unique if request.surface=='all' or c['surface']==request.surface]
     choices.sort(key=lambda c:-c['area']); omitted=max(0,len(choices)-250);choices=choices[:250]
     if not choices: raise ValueError('No complete mapped surfaces of at least 200 m² were found in this area. Try another neighborhood or surface type.')
-    paths={kind:Path(os.getenv(env,'')) for kind,env in [('HIFLD','HIFLD_GEOJSON'),('PAD-US','PADUS_GEOJSON')]}
-    if any(not p.is_file() for p in paths.values()): raise ValueError('Urban screening needs the configured HIFLD and PAD-US files for infrastructure and protected-area checks.')
-    grid=ground_cached(str(paths['HIFLD']),'HIFLD',paths['HIFLD'].stat().st_mtime_ns)
-    protected=ground_cached(str(paths['PAD-US']),'PAD-US',paths['PAD-US'].stat().st_mtime_ns)
-    nearby=local_geometry(grid,bounds.buffer(.5));projected_grid=transform(project,nearby)
-    protected=local_geometry(protected,bounds)
+    if request.region == 'us':
+        from .national_ground import local_ground
+        grid,protected=local_ground(request.bounds)
+        projected_grid=transform(project,grid)
+    else:
+        paths={kind:Path(os.getenv(env,'')) for kind,env in [('HIFLD','HIFLD_GEOJSON'),('PAD-US','PADUS_GEOJSON')]}
+        if any(not p.is_file() for p in paths.values()): raise ValueError('Urban screening needs the configured HIFLD and PAD-US files for infrastructure and protected-area checks.')
+        grid=ground_cached(str(paths['HIFLD']),'HIFLD',paths['HIFLD'].stat().st_mtime_ns)
+        protected=ground_cached(str(paths['PAD-US']),'PAD-US',paths['PAD-US'].stat().st_mtime_ns)
+        nearby=local_geometry(grid,bounds.buffer(.5));projected_grid=transform(project,nearby)
+        protected=local_geometry(protected,bounds)
     power=solar_resource(center.x,center.y); candidates=[]
     timestamp=raw.get('osm3s',{}).get('timestamp_osm_base',raw['retrieved_at'])
     for item in choices:

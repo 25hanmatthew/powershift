@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import re
@@ -15,7 +14,6 @@ def service_status():
         'elasticsearch': bool(os.getenv('ELASTICSEARCH_URL') and os.getenv('ELASTICSEARCH_API_KEY')),
         'semantic_search': bool(os.getenv('ELASTIC_INFERENCE_ID')),
         'openai': bool(os.getenv('OPENAI_API_KEY')),
-        'token_company': bool(os.getenv('TOKEN_COMPANY_API_KEY')),
         'transmission': Path(os.getenv('HIFLD_GEOJSON','data/private/transmission.geojson')).is_file(),
         'protected_areas': Path(os.getenv('PADUS_GEOJSON','data/private/protected.geojson')).is_file(),
     }
@@ -157,19 +155,3 @@ class Elastic:
         response=await self.request('POST','/energy_candidates/_search',json={'size':500,'query':{'bool':{'filter':filters}}})
         telemetry.append({'stage':'analysis','provider':'Elasticsearch','operation':'energy_candidates/_search','status':'measured','latency_ms':round((time.perf_counter()-started)*1000),'hits':response['hits']['total']['value']})
         return [h['_source'] for h in response['hits']['hits']]
-
-async def compress_narrative(narrative, run_id):
-    metrics={'run_id':run_id,'stage':'explanation','provider':'The Token Company','model':'bear-2',
-        'input_tokens_before':None,'input_tokens_after':None,'tokens_saved':None,'compression_ratio':None,
-        'compression_latency_ms':None,'llm_latency_ms':None,'estimated_cost':None,'status':'not configured'}
-    if not os.getenv('TOKEN_COMPANY_API_KEY'): return narrative,metrics
-    from thetokencompany import TheTokenCompany
-    started=time.perf_counter()
-    def compress():
-        with TheTokenCompany(api_key=os.environ['TOKEN_COMPANY_API_KEY']) as client:
-            return client.compress(narrative,model='bear-2',aggressiveness=.25)
-    result=await asyncio.to_thread(compress)
-    metrics.update(status='measured',input_tokens_before=result.input_tokens,input_tokens_after=result.output_tokens,
-        tokens_saved=result.input_tokens-result.output_tokens,compression_ratio=round(result.input_tokens/max(1,result.output_tokens),3),
-        compression_latency_ms=round((time.perf_counter()-started)*1000))
-    return result.output,metrics

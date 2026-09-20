@@ -2,7 +2,7 @@
 
 Earth-observation energy planning with a React/TypeScript workspace and a Python FastAPI analysis service.
 
-The app includes a satellite map, solar/wind portfolio screening, text and OpenAI voice input entry, a five-step progress stream, editable priorities, geographic boundaries, hard constraints, source-level evidence, saved scenarios, GeoJSON export, service traces, and a compression A/B panel.
+The app includes a satellite map, solar/wind portfolio screening, text and OpenAI voice input entry, a five-step progress stream, editable priorities, geographic boundaries, hard constraints, source-level evidence, saved scenarios, GeoJSON export, and service traces.
 
 ## Run locally
 
@@ -39,7 +39,7 @@ Then open http://127.0.0.1:8011. Restart FastAPI after the first build so it mou
 
 The initial workspace intentionally opens in **Demonstration mode**. Its named candidate sites, physical measurements and derived portfolios are synthetic fixtures. The visible satellite basemap is real imagery but is **not** the source of those measurements. The map badge, site details, and exported metadata identify this distinction.
 
-Live providers are implemented, but a complete live run requires external accounts and regional source files. No Earth Engine authentication, Elasticsearch service, OpenAI key, Token Company key, HIFLD file or PAD-US file is bundled. Consequently the real-data sponsor acceptance criteria cannot be certified from the default installation. No fake token savings, completed compression benchmarks or voice transcripts are supplied.
+Live providers are implemented, but a complete live run requires external accounts and regional source files. No Earth Engine authentication, Elasticsearch service, OpenAI key, HIFLD file or PAD-US file is bundled. Consequently the real-data sponsor acceptance criteria cannot be certified from the default installation. No fabricated token savings or voice transcripts are supplied.
 
 The NASA POWER public climatology endpoint has been exercised independently. This does not turn the demonstration fixtures into measured sites.
 
@@ -55,7 +55,6 @@ Copy `.env.example` to `.env`, fill in the server-only configuration, and restar
 | Elasticsearch | `ELASTICSEARCH_URL`, `ELASTICSEARCH_API_KEY` | Creates/updates `energy_datasets` and `energy_candidates`, indexes measurements, and performs separate dataset and spatial searches. Key needs index creation/mapping, write, refresh and search permissions. |
 | Elastic semantic search | `ELASTIC_INFERENCE_ID` | An existing, compatible text embedding inference endpoint enables `semantic_text` + lexical retrieval fused with RRF. Without it, the adapter uses explicitly identified lexical search, which does not meet the hybrid-search acceptance requirement. Use an Elasticsearch version/license supporting these features. |
 | OpenAI text and voice | `OPENAI_API_KEY`, optional `OPENAI_MODEL` and `OPENAI_TRANSCRIPTION_MODEL` | Planner and verifier use the Responses API (`gpt-4.1-mini` by default). Microphone transcription uses Realtime through a backend WebSocket proxy (`gpt-4o-mini-transcribe` by default). Requires access to the configured models. |
-| The Token Company | `TOKEN_COMPANY_API_KEY` | `bear-2` compression of source prose with measured input/output counts and latency. Candidate IDs and numeric contracts are kept outside compression. |
 | HIFLD | `HIFLD_GEOJSON`, `HIFLD_VINTAGE` | A regional GeoJSON FeatureCollection of transmission LineStrings/MultiLineStrings in WGS84. Default labeled vintage: 2022-10-24. |
 | PAD-US | `PADUS_GEOJSON`, `PADUS_VINTAGE` | Regional protected Polygon/MultiPolygon GeoJSON in WGS84. Default version: 4.1. All supplied protected boundaries are conservatively excluded. |
 
@@ -78,7 +77,7 @@ Precompute the flagship region after connecting services:
 .venv/Scripts/python.exe -m scripts.precompute
 ```
 
-This runs live analysis and the optional compression A/B path, saves observations and the result, and prints the run ID. It exits unsuccessfully on failure or a stale fallback. No claim is made that this real precomputation has already been performed.
+This runs live analysis and OpenAI verification, saves observations and the result, and prints the run ID. It exits unsuccessfully on failure or a stale fallback. No claim is made that this real precomputation has already been performed.
 
 ## Historical Intelligence wind add-on
 
@@ -181,11 +180,11 @@ Values use constant 2024 USD and pre-tax, unlevered cash flow. NPV discounts ann
 - All-zero weights use equal weighting; tie breaks use candidate ID. Hard exclusions are never traded for score.
 - Zero-new-land is enforced strictly: it requires a verified developed footprint. WorldCover built-up pixels alone do not qualify, so rural cell searches yield no eligible candidates under that constraint. The Urban solar search uses mapped building and parking footprints; mapped existing use does not verify engineering suitability. Hydro retrofit and geothermal remain unimplemented.
 
-### Cache and compression
+### Cache and AI calls
 
 SQLite under `.cache/` stores normalized region/geometry/date/source-file keys, physical metrics, and run results. Capacity, technology filters, soft weights and hard-filter thresholds are excluded from the physical-analysis key. Slider changes rerank synchronously in the browser; saving/exporting persists the same ranking through a pure Python endpoint with no provider requests.
 
-The Token Company only receives verbose evidence prose. Exact candidate IDs, source IDs, numeric outputs and verification structures bypass compression and are reattached to the model input. Missing keys produce **unmeasured** telemetry, not fabricated zero-token results. The A/B mode sends the compressed and original prose to the same verifier and compares candidate IDs, dataset IDs and constraints against the deterministic contract. Human explanation quality remains unrated. Dollar savings remain unset without a configured pricing basis.
+OpenAI is the only AI provider used for planning, verification, voice transcription and builder search. Screening and ranking remain deterministic. The verifier receives source prose and a structured contract with exact candidate IDs, dataset IDs and constraints. There is no external compression service or duplicate A/B audit call.
 
 ## Checks
 
@@ -213,7 +212,6 @@ scripts/             Local launcher and live precompute command
 - [Earth Engine WorldCover v200](https://developers.google.com/earth-engine/datasets/catalog/ESA_WorldCover_v200), [SRTM](https://developers.google.com/earth-engine/datasets/catalog/USGS_SRTMGL1_003), [VIIRS](https://developers.google.com/earth-engine/datasets/catalog/NOAA_VIIRS_DNB_MONTHLY_V1_VCMSLCFG), [ERA5 hourly fields](https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_HOURLY)
 - [NASA POWER API](https://power.larc.nasa.gov/docs/tutorials/service-data-request/api/)
 - [Elastic hybrid retrieval](https://www.elastic.co/docs/solutions/search/hybrid-search) and [geo_shape mappings](https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/geo-shape)
-- [The Token Company compression](https://thetokencompany.com/docs/compression) and [Python SDK](https://github.com/TheTokenCompany/the-token-company-python)
 - [OpenAI realtime speech API](https://developers.openai.com/api/docs/guides/realtime-transcription)
 
 Map attribution is displayed in the map: Esri/Maxar/Earthstar satellite imagery, OpenStreetMap and CARTO labels. External basemap tiles and optional Google Fonts require network access; the rest of demonstration mode runs against the local server.
@@ -223,7 +221,7 @@ Map attribution is displayed in the map: Esri/Maxar/Earthstar satellite imagery,
 
 Use the main text search: **Find the 5 best rooftops for solar in Sacramento, CA**, **3 parking lots in Reno, NV**, or **2 parking structures in Spokane, WA**. Searches always use live data, irrespective of previous demo settings. Five recommendations are shown by default; request between 1 and 20. An optional capacity such as “500 kW” sets a portfolio target; otherwise the metric shows combined shortlist potential. No additional credentials are required.
 
-`POST /api/city/search` resolves the named incorporated city through U.S. Census TIGERweb boundaries and requires every recommended footprint to lie completely inside it. Supported cities must fit within the existing northern California/Nevada or eastern Washington coverage. Unsupported or ambiguous cities return a clear error; another city is never substituted. Citywide discovery covers mapped commercial/public or named buildings and parking, screens the 250 largest qualifying surfaces, then returns the requested shortlist. This is not an exhaustive roof inventory. The older neighborhood API remains available with its 36 km² limit.
+`POST /api/city/search` resolves the named city or Census place through U.S. Census TIGERweb boundaries and requires every recommended footprint to lie completely inside it. City search accepts all 50 US states and DC, including Census-designated places and county subdivisions when there is no matching place. Include the state for ambiguous names. Honolulu resolves to Urban Honolulu, not the much larger administrative area. Another city is never substituted. Outside the original regional presets, screening reads local windows from the national HIFLD transmission index and PAD-US geodatabase. Missing national sources stop screening rather than implying zero protection. Oversized footprint queries split into cached tiles; every tile must succeed before results are returned. Citywide discovery covers mapped commercial/public or named buildings and parking, screens the 250 largest qualifying surfaces, then returns the requested shortlist. This is not an exhaustive roof inventory. The older neighborhood API remains available with its 36 km² limit.
 
 `POST /api/urban/search` queries OpenStreetMap via Overpass, caches raw responses for seven days, preserves polygon holes, removes overlapping outlines, and screens the 250 largest complete mapped surfaces of at least 200 m². OSM coverage is not exhaustive. Capacity uses 45% usable roof/deck area or 55% parking area, 200 W DC/m² and 1.30 DC/AC. Decks count only their top footprint. NASA POWER climatology supplies a coarse energy scenario with a 0.8 performance ratio; HIFLD and PAD-US retain transmission-proximity and protected-area checks. Failed providers never produce synthetic results.
 
@@ -232,7 +230,7 @@ Urban 3D concepts place individual 650 W modules on the mapped footprint, using 
 
 ### City planning workspace and surrounding buildings
 
-The app opens a **live Sacramento city search with five rooftop recommendations** and existing-surface reuse enabled. The primary user is a city sustainability planner identifying roofs and parking areas for follow-up assessment. These are mapped opportunities, not a verified inventory of city-owned assets. The main interface uses one plain-text city request; regional solar/wind workflows remain available through the API.
+The app opens a **live Sacramento city search with five rooftop recommendations** and existing-surface reuse enabled. The Sacramento demo button returns to this example from any city. It uses live data, not synthetic fixtures. Nationwide name search removes the regional restriction, but results still depend on mapped footprints and source availability, and do not extend the wind model's validated geography. The primary user is a city sustainability planner identifying roofs and parking areas for follow-up assessment. These are mapped opportunities, not a verified inventory of city-owned assets. The main interface uses one plain-text city request; regional solar/wind workflows remain available through the API.
 
 Surrounding buildings load independently through OpenFreeMap's OpenMapTiles vector source (`https://tiles.openfreemap.org/planet`) and a native MapLibre fill-extrusion layer. Coverage continues as the user pans beyond the analyzed neighborhood. Provider render heights may derive from mapped heights, levels, or defaults; they are visual context, not surveyed geometry. The **3D buildings** map button toggles the layer. Opening a project replaces its context shell and contained parts with the selected concept, keeping nearby buildings visible. Courtyards remain open. Broader map views show fewer numbered pins to keep the neighborhood readable.
 
@@ -263,3 +261,13 @@ The project layer now persists through row-spacing changes and swaps geometry in
 
 
 Buildings include illustrative window rows, facade frames, floor bands, plinths and roof parapets. Selected project shells retain footprint courtyards; no decorative rooftop equipment is added to the solar layout. Nearby detail loads only at zoom 17 and above, reuses the visible vector footprints and heights, and is capped at 70 buildings / 16,000 instances with two instanced detail meshes. No extra building service or credential is required. These architectural details are procedural visual context, not a survey or verified facade inventory.
+
+### National ground-data setup
+
+Keep the original national downloads in `data/private/source/`, then run:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.prepare_national_ground
+```
+
+This creates `data/private/national/transmission.gpkg` with a spatial index, without clipping national coverage. PAD-US is queried directly from `data/private/source/PADUS4_1Geodatabase.gdb` (Fee, Designation, Easement and Marine layers, excluding Proclamation outlines). Override the paths with `HIFLD_NATIONAL` and `PADUS_NATIONAL`. National archives, indices, and caches remain private and ignored by Git. For northern Alaska wind screening, Copernicus GLO-30 supplies terrain beyond SRTM's latitude coverage. City-level screening still requires mapped footprints and complete resource measurements; an empty shortlist is valid, not proof that a city cannot use renewable energy.

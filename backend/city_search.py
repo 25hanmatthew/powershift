@@ -15,9 +15,11 @@ from .models import REGIONS, Plan
 from .urban import UrbanRequest, discover, fetch_query
 from .scoring import rank_candidates
 from .earth import analyze as analyze_land
+from .us_states import STATES, STATE_NAMES
+from concurrent.futures import ThreadPoolExecutor
 
 CENSUS='https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Places_CouSub_ConCity_SubMCD/MapServer/4'
-STATES={'ca':('06','California'),'california':('06','California'),'nv':('32','Nevada'),'nevada':('32','Nevada'),'wa':('53','Washington'),'washington':('53','Washington')}
+CENSUS_BASE = CENSUS.rsplit('/', 1)[0]
 
 class CitySearchRequest(BaseModel):
     query: str = Field(min_length=2,max_length=500)
@@ -50,21 +52,40 @@ def parse_query(query):
     return {'city':city,'limit':limit,'target_mw':target,'surface':surface,'technology':'wind' if wind else 'solar'}
 
 def resolve_city(name):
-    state=None;clean=name.strip()
-    for suffix,(code,label) in STATES.items():
+    state=None;clean=re.sub(r'\bD\.C\.?$', 'DC', name.strip(), flags=re.I)
+    if clean.casefold() in ('washington dc', 'washington, dc', 'district of columbia'):
+        clean='Washington, DC'
+    for suffix,(code,label) in sorted(STATES.items(), key=lambda item: -len(item[0])):
         match=re.search(r'(?:,\s*|\s+)'+suffix+r'$',clean,re.I)
         if match: state=code;clean=clean[:match.start()].strip();break
-    key='city-boundary-census-v1:'+hashlib.sha256((clean.casefold()+':'+str(state)).encode()).hexdigest()
+    if clean.casefold() in ('new york city','nyc') and state in (None,'36'): clean='New York';state='36'
+    if clean.casefold()=='honolulu' and state in (None,'15'): clean='Urban Honolulu';state='15'
+    key='city-boundary-census-us-v3:'+hashlib.sha256((clean.casefold()+':'+str(state)).encode()).hexdigest()
     previous=Cache().get(key)
     if previous and (datetime.now(timezone.utc)-datetime.fromisoformat(previous['created_at'])).days<30:
         return previous['data']
     escaped=clean.upper().replace("'","''")
-    where=f"UPPER(BASENAME) = '{escaped}'"+(f" AND STATE = '{state}'" if state else " AND STATE IN ('06','32','53')")
-    response=httpx.get(CENSUS+'/query',params={'f':'geojson','where':where,'outFields':'NAME,BASENAME,STATE,GEOID','outSR':4326,'returnGeometry':'true'},timeout=30)
-    response.raise_for_status();data=response.json()
-    if data.get('error'): raise ValueError('The city boundary service could not complete this search. Try again.')
+    where=f"UPPER(BASENAME) = '{escaped}'"+(f" AND STATE = '{state}'" if state else " AND STATE IN ("+','.join("'"+code+"'" for code in STATE_NAMES)+")")
+    def query_layer(layer):
+        url=f'{CENSUS_BASE}/{layer}'
+        response=httpx.get(url+'/query',params={'f':'geojson','where':where,'outFields':'NAME,BASENAME,STATE,GEOID','outSR':4326,'returnGeometry':'true'},timeout=40)
+        response.raise_for_status();data=response.json()
+        if data.get('error') or data.get('exceededTransferLimit'):
+            raise ValueError('The city boundary service could not complete this search. Add a state or retry.')
+        return [dict(feature, source_url=url) for feature in data.get('features',[])]
+    # Honolulu and other unincorporated communities are Census-designated places.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        features=[feature for group in pool.map(query_layer,(4,5)) for feature in group]
+    if not features:
+        features=query_layer(1)  # New England towns and other county subdivisions.
     matches=[]
-    for feature in data.get('features',[]):
+    seen=set()
+    for feature in features:
+        props=feature['properties']
+        if props.get('STATE') not in STATE_NAMES or (state and props.get('STATE')!=state): continue
+        if props.get('BASENAME','').casefold()!=clean.casefold(): continue
+        if props['GEOID'] in seen: continue
+        seen.add(props['GEOID'])
         geom=shape(feature['geometry'])
         if geom.geom_type not in ('Polygon','MultiPolygon'): continue
         # Census rings can touch at annexation boundaries. Repair topology while retaining enclaves.
@@ -74,12 +95,12 @@ def resolve_city(name):
                 geom=unary_union([part for part in geom.geoms if part.geom_type in ('Polygon','MultiPolygon')])
         if geom.is_empty or not geom.is_valid or geom.geom_type not in ('Polygon','MultiPolygon'): continue
         # Coverage is explicit: never quietly replace a requested city with a regional preset.
-        region=next((key for key in ('sacramento','california-nevada','washington') if box(*REGIONS[key]['bounds']).covers(geom)),None)
+        region=next((key for key in ('sacramento','california-nevada','washington') if box(*REGIONS[key]['bounds']).covers(geom)), 'us')
         if region:
-            props=feature['properties'];matches.append({'name':props['BASENAME'],'state':next(label for code,label in STATES.values() if code==props['STATE']),
-                'geoid':props['GEOID'],'region':region,'geometry':mapping(geom),'bounds':list(geom.bounds),'source_url':CENSUS,'vintage':'2026-01-01'})
-    if not matches: raise ValueError('No supported city boundary matched that name. Try Sacramento, Davis, Reno or Spokane. Current coverage is northern California/Nevada and eastern Washington; no alternate city was substituted.')
-    if len(matches)>1: raise ValueError('More than one city matches. Add the state to your request.')
+            props=feature['properties'];matches.append({'name':props['BASENAME'],'state':STATE_NAMES[props['STATE']],
+                'geoid':props['GEOID'],'region':region,'geometry':mapping(geom),'bounds':list(geom.bounds),'source_url':feature['source_url'],'vintage':'Current TIGERweb boundary; retrieved '+datetime.now(timezone.utc).date().isoformat()})
+    if not matches: raise ValueError('No US city or Census place matched that name. Include the city and state, for example Sacramento, CA or Austin, TX. No alternate city was substituted.')
+    if len(matches)>1: raise ValueError('More than one city matches. Add the state: '+', '.join(sorted({c['state'] for c in matches}))+'.')
     city=matches[0];Cache().set(key,city);return city
 
 def search_city(query):
@@ -87,9 +108,7 @@ def search_city(query):
     if parsed['technology']=='wind': return search_city_wind(query,parsed,city)
     # Focus public/commercial roof tags and parking across the city, keeping public Overpass queries bounded.
     roof_types='commercial|industrial|retail|warehouse|office|school|hospital|university|public|civic|government|college|hotel|sports_centre|supermarket|parking'
-    bbox=f'{s},{w},{n},{e}'
-    overpass=f'[out:json][timeout:35];(wr["building"~"^({roof_types})$"]({bbox});wr["building"]["name"]({bbox});wr["amenity"="parking"]({bbox}););out meta geom;'
-    raw=fetch_query('city-surfaces-v1:'+city['geoid'],overpass)
+    raw=fetch_city_surfaces(city,roof_types)
     # This trusted city boundary is resolved above; the public neighborhood endpoint keeps its 36 km² limit.
     req=UrbanRequest.model_construct(bounds=tuple(city['bounds']),region=city['region'],surface=parsed['surface'],target_mw=parsed['target_mw'] or 1)
     physical,summary=discover(req,supplied=raw,city_boundary=shape(city['geometry']))
@@ -103,6 +122,40 @@ def search_city(query):
     summary['note']=f"Showing {len(shortlist)} recommendations within {city['name']}, {city['state']}, from {len(physical)} screened surfaces. Citywide discovery covers mapped commercial/public or named building roofs and parking areas; untagged and residential roofs may be absent. "+summary['note']
     return ranked,shortlist,plan,summary,city
 
+def fetch_city_surfaces(city,roof_types):
+    """Split oversized city queries, preserving all returned geometry and cache reuse."""
+    key='city-surfaces-tiled-v1:'+city['geoid']
+    cache=Cache();previous=cache.get(key)
+    if previous and (datetime.now(timezone.utc)-datetime.fromisoformat(previous['created_at'])).days<7:
+        return previous['data'],True
+    boundary=shape(city['geometry'])
+    def fetch(bounds,depth=0):
+        w,s,e,n=bounds
+        if not boundary.intersects(box(*bounds)):
+            return []
+        bbox=f'{s},{w},{n},{e}'
+        query=f'[out:json][timeout:35];(wr["building"~"^({roof_types})$"]({bbox});wr["building"]["name"]({bbox});wr["amenity"="parking"]({bbox}););out meta geom;'
+        part_key=('city-surfaces-v1:'+city['geoid'] if depth==0 else key+':'+hashlib.sha256(bbox.encode()).hexdigest())
+        try:
+            return [fetch_query(part_key,query)[0]]
+        except ValueError as exc:
+            if depth>=3 or not any(message in str(exc) for message in ('Too many urban features','timed out')):
+                raise
+            mx=(w+e)/2;my=(s+n)/2
+            tiles=((w,s,mx,my),(mx,s,e,my),(w,my,mx,n),(mx,my,e,n))
+            # Parallelize the first split only, keeping service load bounded.
+            if depth==0:
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    return [part for parts in pool.map(lambda tile:fetch(tile,depth+1),tiles) for part in parts]
+            return [part for tile in tiles for part in fetch(tile,depth+1)]
+    parts=fetch(city['bounds'])
+    elements={(el['type'],el['id']):el for part in parts for el in part['elements']}
+    data={'elements':list(elements.values()),'retrieved_at':max(part['retrieved_at'] for part in parts),
+          'osm3s':{'timestamp_osm_base':min(part.get('osm3s',{}).get('timestamp_osm_base',part['retrieved_at']) for part in parts)}}
+    cache.set(key,data)
+    return data,False
+
+
 def search_city_wind(query,parsed,city):
     w,s,e,n=city['bounds']
     plan=Plan(region=city['region'],technology='wind',mode='live',query=query,target_mw=parsed['target_mw'] or 1,
@@ -110,7 +163,10 @@ def search_city_wind(query,parsed,city):
     files=[]
     for env in ('HIFLD_GEOJSON','PADUS_GEOJSON'):
         path=Path(os.getenv(env,''));files.append([str(path),path.stat().st_mtime_ns if path.is_file() else None])
-    key='city-wind-v1:'+hashlib.sha256(json.dumps([city['geometry'],plan.start_date,plan.end_date,files],sort_keys=True).encode()).hexdigest()
+    if city['region']=='us':
+        from .national_ground import fingerprint
+        files.append(fingerprint())
+    key='city-wind-v3:'+hashlib.sha256(json.dumps([city['geometry'],plan.start_date,plan.end_date,files],sort_keys=True).encode()).hexdigest()
     cache=Cache();stored=cache.get(key);hit=stored is not None
     boundary=shape(city['geometry'])
     if stored: physical=stored['data']

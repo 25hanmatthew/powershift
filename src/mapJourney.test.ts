@@ -24,3 +24,9 @@ describe('map search journey',()=>{
   expect(searchBounds('california-nevada',polygon)).toEqual([-123,37.3,-120,40]);
  });
 });
+
+it('keeps national city searches centered on their own local boundary',()=>{
+ const polygon:Polygon={type:'Polygon',coordinates:[[[-71.2,42.2],[-71,42.2],[-71,42.4],[-71.2,42.4],[-71.2,42.2]]]};
+ expect(searchBounds('us',polygon)).toEqual([-71.2,42.2,-71,42.4]);
+ for(const [x,y] of surveyStops('us',polygon)){expect(x).toBeGreaterThan(-71.2);expect(x).toBeLessThan(-71);expect(y).toBeGreaterThan(42.2);expect(y).toBeLessThan(42.4);}
+});

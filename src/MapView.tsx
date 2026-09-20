@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, Map as MapInstance } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Check, Layers3, LocateFixed, Minus, Plus, Scan, Satellite, X, Mountain, Compass, Building2 } from 'lucide-react';
+import { Check, LocateFixed, Minus, Plus, Scan, Satellite, X, Mountain, Compass, Building2 } from 'lucide-react';
 import type { Candidate, Polygon, Region, Result } from './types';
 import type { EquipmentSelection } from './equipmentSelection';
 import type { SiteLayout } from './siteConcept';
@@ -21,8 +21,8 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
  const layerRef=useRef<ReturnType<typeof createSiteLayer>|null>(null);
  const modelSettings=useRef({siteLayout,modelSun,modelMotion});modelSettings.current={siteLayout,modelSun,modelMotion};
  const [buildings,setBuildings]=useState(true);const [buildingStatus,setBuildingStatus]=useState('Loading 3D buildings…');
- const [terrain,setTerrain]=useState(true);const [terrainStatus,setTerrainStatus]=useState('Loading terrain elevation…');
- const [ready,setReady]=useState(false); const [satellite,setSatellite]=useState(true);const [drawing,setDrawing]=useState(false);const [points,setPoints]=useState<number[][]>([]);const [mapError,setMapError]=useState(false);
+ const [terrain,setTerrain]=useState(true);const [,setTerrainStatus]=useState('Loading terrain elevation…');
+ const [ready,setReady]=useState(false);const [drawing,setDrawing]=useState(false);const [points,setPoints]=useState<number[][]>([]);const [mapError,setMapError]=useState(false);
  const drawingRef=useRef(false); const selectRef=useRef(onSelect); selectRef.current=onSelect;
  const [viewZoom,setViewZoom]=useState(14);const [journeyPhase,setJourneyPhase]=useState('idle');const [viewCenter,setViewCenter]=useState([-120,39.4]);
  const fittedRegion=useRef(region);
@@ -53,11 +53,8 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
    style:{version:8,light:{anchor:'viewport',color:'#fff6df',intensity:.42,position:[1.5,210,35]},sources:{
     'city-context':{type:'vector',url:'https://tiles.openfreemap.org/planet'},
     satellite:{type:'raster',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],tileSize:256,attribution:'Imagery © Esri, Maxar, Earthstar Geographics'},
-    dark:{type:'raster',tiles:['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors © CARTO'},
-    labels:{type:'raster',tiles:['https://basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors © CARTO'},
-   },layers:[{id:'base',type:'background',paint:{'background-color':'#132227'}},{id:'dark',type:'raster',source:'dark',layout:{visibility:'none'}},
-    {id:'satellite',type:'raster',source:'satellite',paint:{'raster-saturation':-.68,'raster-brightness-max':.68,'raster-contrast':.12}},
-    {id:'labels',type:'raster',source:'labels',maxzoom:14,paint:{'raster-opacity':.78}}]}});
+   },layers:[{id:'base',type:'background',paint:{'background-color':'#132227'}},
+    {id:'satellite',type:'raster',source:'satellite',paint:{'raster-saturation':-.68,'raster-brightness-max':.68,'raster-contrast':.12}}]}});
   } catch {setMapError(true);return;}
   map.current=instance;
   // Cover neighborhood-to-building distances with fewer wheel turns.
@@ -90,7 +87,7 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
    const layout=modelSettings.current.siteLayout;if(!layout)return;
    const [x,y,z]=equipment.position;const center:[number,number]=[layout.center[0]+x/(111320*Math.cos(layout.center[1]*Math.PI/180)),layout.center[1]-z/111320];
    cancelFlight();instance.setCenterClampedToGround(false);instance.setCenterElevation(y);
-   instance.flyTo({center,elevation:y,freezeElevation:true,zoom:equipment.kind==='solar'?21.5:17,pitch:equipment.kind==='solar'?50:55,bearing:instance.getBearing(),padding:{top:0,bottom:0,left:0,right:0},offset:window.innerWidth<721?[0,-140]:[-220,20],duration:reduced()?0:1100});
+   instance.flyTo({center,elevation:y,freezeElevation:true,zoom:equipment.kind==='solar'?21.5:17,pitch:equipment.kind==='solar'?50:55,bearing:instance.getBearing(),padding:{top:0,bottom:0,left:0,right:0},offset:[0,35],duration:reduced()?0:1100});
   });
   const observer=new ResizeObserver(()=>instance.resize());observer.observe(host.current);
   return ()=>{clearTimers();removeMouseControls();observer.disconnect();markers.current.forEach(m=>m.remove());instance.remove();map.current=null;};
@@ -102,9 +99,9 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
   return()=>{cancelled=true;if(map.current===instance&&instance.getLayer('city-building-details'))instance.removeLayer('city-building-details');};
  },[ready,buildings,viewZoom>=17]);
  useEffect(()=>{drawingRef.current=drawing;if(map.current)map.current.getCanvas().style.cursor=drawing?'crosshair':'';},[drawing]);
- useEffect(()=>{if(!ready||!map.current)return;map.current.setLayoutProperty('dark','visibility',satellite?'none':'visible');map.current.setLayoutProperty('satellite','visibility',satellite?'visible':'none');map.current.setLayoutProperty('labels','visibility',satellite?'visible':'none');},[satellite,ready]);
  const fit=()=>{equipmentSelectRef.current(null);cancelFlight();const [w,s,e,n]=searchBounds(region,polygon);map.current?.fitBounds([[w,s],[e,n]],{padding:padding(),pitch:buildings?50:0,bearing:0,duration:reduced()?0:1100});};
  useEffect(()=>{if(ready&&!flightActive.current&&region!==fittedRegion.current){fittedRegion.current=region;fit();}},[region,ready]);
+ useEffect(()=>{if(ready&&city&&!selectedId&&!busy)fit();},[resultKey,ready]);
  useEffect(()=>{
   const instance=map.current;if(!ready||!instance||!journey.id)return;
   clearTimers();instance.stop();setDrawing(false);flightActive.current=true;tourFinished.current=false;
@@ -159,7 +156,7 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
  },[terrain,Boolean(siteLayout),ready]);
  useEffect(()=>{
   const instance=map.current;if(!ready||!instance)return;
-  const active=Boolean(siteLayout);if(active){setSatellite(true);setTerrain(true);}
+  const active=Boolean(siteLayout);if(active)setTerrain(true);
   instance.setPaintProperty('satellite','raster-saturation',active?-.08:-.68);
   instance.setPaintProperty('satellite','raster-brightness-max',active?1:.68);
   instance.setPaintProperty('footprints-fill','fill-opacity',active?0:.2);
@@ -198,14 +195,14 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
  useEffect(()=>{
   const instance=map.current;if(!instance||!ready||!siteLayout)return;
   cancelFlight();const mobile=compact;
-  const offset:[number,number]=mobile?[0,-60]:[-180,150];
+  const offset:[number,number]=mobile?[0,30]:[0,70];
   if(modelView==='equipment'){
    const p=siteLayout.technology==='solar'&&!siteLayout.surfaceType?[...siteLayout.points].sort((a,b)=>Math.hypot(a[0]-200,a[1]-200)-Math.hypot(b[0]-200,b[1]-200))[0]||[0,0]:siteLayout.points[0]||[0,0];
    const center:[number,number]=[siteLayout.center[0]+p[0]/(111320*Math.cos(siteLayout.center[1]*Math.PI/180)),siteLayout.center[1]-p[1]/111320];
    instance.flyTo({center,zoom:siteLayout.technology==='solar'?(siteLayout.surfaceType?(mobile?19.4:20):(mobile?18.2:18.7)):(mobile?15.8:16.3),pitch:65,bearing:-28,padding:{top:0,bottom:0,left:0,right:0},offset,duration:reduced()?0:1800});
   }else{
    const [w,s,e,n]=siteLayout.bounds;
-   instance.fitBounds([[w,s],[e,n]],{padding:mobile?{top:120,bottom:330,left:40,right:40}:{top:125,bottom:80,left:70,right:430},maxZoom:siteLayout.surfaceType?19:15.5,pitch:modelView==='plan'?0:60,bearing:modelView==='plan'?0:-25,duration:reduced()?0:1800});
+   instance.fitBounds([[w,s],[e,n]],{padding:mobile?{top:80,bottom:35,left:25,right:55}:{top:110,bottom:50,left:50,right:80},maxZoom:siteLayout.surfaceType?19:15.5,pitch:modelView==='plan'?0:60,bearing:modelView==='plan'?0:-25,duration:reduced()?0:1800});
   }
  },[siteLayout?.center[0],siteLayout?.center[1],Boolean(siteLayout),modelView,ready,compact]);
  return <div className={`map-stage ${viewZoom<16?'city-overview':''} ${journeyPhase==='surveying'?'is-surveying':''} ${siteLayout?'has-site-model':''}`} data-journey={journeyPhase}>
@@ -215,7 +212,6 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
   <div className="map-topline"><span className="map-eyebrow"><span className="live-dot"/> CITY ENERGY WORKSPACE</span><span className="coordinate-label">{Math.abs(viewCenter[1]).toFixed(2)}° {viewCenter[1]>=0?'N':'S'} / {Math.abs(viewCenter[0]).toFixed(2)}° {viewCenter[0]>=0?'E':'W'}</span></div>
   <div className="map-title"><span>FROM ORBIT TO OPPORTUNITY</span><h2>{city?.name||REGIONS[busy?journey.region:region].short}</h2><p>{busy?'Exploring the search area…':'Renewable opportunities inside city limits.'}</p></div>
   {journeyPhase==='surveying'&&<><div className="survey-reticle" aria-hidden="true"><i/><i/><span/></div><div className="journey-caption"><span className="live-dot"/>Exploring the search area<button onClick={()=>{tourFinished.current=true;clearTimers();map.current?.stop();settle();}}>Skip flight <Check size={13}/></button></div></>}
-  {siteLayout&&<div className="map-model-status"><span className="live-dot"/>{terrainStatus}<small>Click a panel or turbine for stats</small><small>Left-drag to pan · middle-drag to rotate · scroll to zoom</small></div>}
   {buildings&&buildingStatus.includes('unavailable')&&<div className="city-building-status"><Building2 size={13}/><span>{buildingStatus}</span></div>}
   <div className="map-tools">
    <button title="3D buildings" aria-label="3D buildings" aria-pressed={buildings} onClick={()=>{setBuildings(!buildings);if(!buildings)map.current?.easeTo({pitch:55,duration:reduced()?0:700});}}><Building2 size={18}/></button>
@@ -227,6 +223,6 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
    <button title="Fit region" aria-label="Fit region" onClick={fit}><LocateFixed size={18}/></button>
   </div>
   {drawing&&<div className="draw-instructions"><Scan size={17}/><span>Click the map to draw a boundary · {points.length} points</span><button disabled={points.length<3} onClick={()=>{onPolygon({type:'Polygon',coordinates:[[...points,points[0]]]});setDrawing(false);}}><Check size={16}/> Use boundary</button><button aria-label="Cancel drawing" onClick={()=>{setDrawing(false);setPoints([]);}}><X size={16}/></button></div>}
-  <div className="map-bottom"><div className="map-legend"><span><i className="solar-dot"/>Solar</span><span><i className="wind-dot"/>Wind</span><span><i className="selected-dot"/>Portfolio site</span></div><button className="map-layer" onClick={()=>setSatellite(!satellite)}><Layers3 size={16}/>{satellite?'Satellite':'Dark map'}</button></div>
+  <div className="map-bottom"><div className="map-legend"><span><i className="solar-dot"/>Solar</span><span><i className="wind-dot"/>Wind</span><span><i className="selected-dot"/>Portfolio site</span></div></div>
  </div>;
 }

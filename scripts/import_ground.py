@@ -88,9 +88,9 @@ def main():
     parser.add_argument('--output-dir',type=Path,default=Path('data/private'))
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True,exist_ok=True)
-    area = unary_union([box(*region['bounds']) for region in REGIONS.values()])
+    area = unary_union([box(*region['bounds']) for key, region in REGIONS.items() if key != 'us'])
     grid_area = unary_union([box(w-3,s-3,e+3,n+3) for w,s,e,n in
-                            [region['bounds'] for region in REGIONS.values()]])
+                            [region['bounds'] for key, region in REGIONS.items() if key != 'us']])
     grid = convert(args.source_dir/'transmission-lines-1-geojson.geojson', [None],
                    args.output_dir/'transmission.geojson',grid_area,
                    ['ID','TYPE','STATUS','OWNER','VOLTAGE','VOLT_CLASS','SOURCEDATE'],
@@ -101,7 +101,7 @@ def main():
                         ['Unit_Nm','State_Nm','GAP_Sts','Category','Own_Name','Mang_Name','Src_Date'],
                         ('Polygon','MultiPolygon'))
     manifest = {'created_at':datetime.now(timezone.utc).isoformat(),'crs':'EPSG:4326',
-                'regions':REGIONS,'transmission_buffer_degrees':3,'simplification':False,
+                'regions':{key:value for key,value in REGIONS.items() if key!='us'},'transmission_buffer_degrees':3,'simplification':False,
                 'transmission':grid,'protected':protected,
                 'padus_version':'4.1',
                 'hifld_source_url':'https://www.datalumos.org/datalumos/project/240591/version/V1/view',

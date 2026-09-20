@@ -218,5 +218,32 @@
     "description": "Optional optical and surface-temperature cross-check; VIIRS supplies the additional orbital layer in the MVP pipeline.",
     "limitations": "Not computed by the current pipeline. Requires QA masking and scale/offset conversion before use.",
     "license": "Public domain"
+  },
+  {
+    "id": "copdem",
+    "name": "Copernicus DEM GLO-30",
+    "provider": "European Union / ESA / Airbus",
+    "sensor": "TanDEM-X / WorldDEM",
+    "space_derived": true,
+    "access_method": "Earth Engine",
+    "asset_id": "COPERNICUS/DEM/GLO30_2024_1",
+    "resolution_m": 30,
+    "vintage": "2010–2020 · release 2024_1",
+    "variables": [
+      "DEM"
+    ],
+    "metrics": [
+      "slope",
+      "terrain"
+    ],
+    "energy_types": [
+      "solar",
+      "wind"
+    ],
+    "coverage": "Global, including Alaska",
+    "source_url": "https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_DEM_GLO30_2024_1",
+    "description": "Surface elevation for northern US terrain screening beyond SRTM coverage. Slope uses the native tile projection.",
+    "limitations": "Surface model includes buildings and vegetation; not a bare-earth or engineering survey.",
+    "license": "Copernicus DEM license"
   }
 ]
