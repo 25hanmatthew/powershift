@@ -7,6 +7,13 @@ const fixture=(id:string,overrides:Partial<Candidate>={}):Candidate=>({id,site_i
 const source=(candidates:Candidate[])=>({candidates,excluded:[],selected_ids:[],plan:DEFAULT_PLAN} as unknown as Result);
 
 describe('instant ranking',()=>{
+ it('preserves regional resource and overlapping-surface exclusions when filters change',()=>{
+  const input=source([fixture('safe'),fixture('overlap',{screening_reasons:['Overlaps a screened urban surface']}),fixture('calm',{technology:'wind',screening_reasons:['Mean wind below 5.8 m/s']})]);
+  const result=rerank(input,{...DEFAULT_PLAN,constraints:{...DEFAULT_PLAN.constraints,exclude_protected:false,max_grid_km:100}});
+  expect(result.candidates.map(c=>c.id)).toEqual(['safe']);
+  expect(result.excluded).toHaveLength(2);
+  expect(result.portfolio.capacity_mw).toBe(80);
+ });
  it('keeps legacy results usable with missing or null ML fields',()=>{
   const legacy=fixture('legacy');const nullable=fixture('legacy',{ml_enabled:false,ml_corrected_expected_cf:null,ml_confidence:null});
   const a=rerank(source([legacy]),DEFAULT_PLAN);const b=rerank(source([nullable]),{...DEFAULT_PLAN,historical_intelligence:true});

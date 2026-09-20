@@ -32,6 +32,7 @@ def exclusions(c, plan):
         reasons.append('No verified developed footprint')
     if c['capacity_mw'] < k.min_capacity_mw: reasons.append('Minimum capacity')
     if c.get('excluded_land_cover', False): reasons.append('Incompatible land cover')
+    reasons.extend(c.get('screening_reasons', []))
     return reasons
 
 def rank_candidates(candidates, plan: Plan):

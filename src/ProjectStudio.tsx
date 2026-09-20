@@ -1,4 +1,5 @@
 import { useEffect,useMemo,useState } from 'react';
+import type { CSSProperties } from 'react';
 import { ArrowDownToLine,ArrowRight,Box,Check,ChartNoAxesCombined,Coins,Info,Layers3,Leaf,Maximize,Pause,Play,RotateCcw,Sun,Wind,Zap,Truck } from 'lucide-react';
 import type { Candidate } from './types';
 import type { SiteLayout } from './siteConcept';
@@ -9,6 +10,11 @@ import './project-studio.css';
 
 const number=(n:number,digits=1)=>n.toLocaleString('en-US',{maximumFractionDigits:digits});
 const money=(n:number)=>`${n<0?'−':''}$${number(Math.abs(n)/1e6,2)}m`;
+const sliderFill=(value:number,min:number,max:number):CSSProperties=>{
+ const fraction=Math.max(0,Math.min(1,(value-min)/(max-min)));
+ // Match the center of the 10 px thumb throughout its travel.
+ return {'--range-fill':`calc(${fraction*100}% + ${5-fraction*10}px)`} as CSSProperties;
+};
 export default function ProjectStudio({candidate:c,demo,onLayout,onView,onSun,onMotion,onSuppliers}:{candidate:Candidate;demo:boolean;onLayout?:(layout:SiteLayout)=>void;onView?:(view:'overview'|'equipment'|'plan')=>void;onSun?:(hour:number)=>void;onMotion?:(motion:boolean)=>void;onSuppliers?:()=>void}){
  const [tab,setTab]=useState<'design'|'economics'>('design');const [view,setView]=useState<'overview'|'equipment'|'plan'>('equipment');
  const urban=Boolean(c.surface_type);const urbanCostSource={name:'Editable urban construction scenario, not a contractor quote',rooftopPerKW:3000,parkingPerKW:4000};
@@ -21,6 +27,7 @@ export default function ProjectStudio({candidate:c,demo,onLayout,onView,onSun,on
  useEffect(()=>{onMotion?.(motion);},[motion,onMotion]);
  const finance=useMemo(()=>calculateFinance(c,layout,inputs),[c,layout,inputs]);
  const solar=c.technology==='solar';const shortfall=c.capacity_mw-layout.capacityMW;
+ const spacingMin=urban?2.8:solar?8:4;const spacingMax=urban?6:solar?22:8;const spacingValue=solar?rowPitch:windSpacing;
  const update=(key:keyof FinanceInputs,value:number)=>setInputs(old=>({...old,[key]:value}));
  const exportScenario=()=>{
   const payload={site:{id:c.id,name:c.name,longitude:c.longitude,latitude:c.latitude,geometry:c.geometry,synthetic:demo},
@@ -39,15 +46,15 @@ export default function ProjectStudio({candidate:c,demo,onLayout,onView,onSun,on
   {tab==='design'?<div key="design" className="design-workspace">
    <div className="scene-column"><div className="scene-wrapper">
     <div className="scene-heading"><span className="overline">{urban?c.surface_type?.replaceAll('_',' ').toUpperCase():solar?'SOLAR ARRAY':'WIND FARM'} / SPATIAL CONCEPT</span><h3>{number(layout.capacityMW*(urban?1000:1),2)} <small>{urban?'kW':'MW'}{solar?' AC':''}</small></h3><p>{number(c.latitude,4)}° N · {number(Math.abs(c.longitude),4)}° W</p></div>
-    <div className="scene-view-controls">{([{id:'overview',label:'Overview',icon:Maximize},{id:'equipment',label:'Equipment',icon:Box},{id:'plan',label:'Plan view',icon:Layers3}] as const).map(({id,label,icon:Icon})=><button key={id} aria-pressed={view===id} onClick={()=>setView(id)}><Icon size={14}/>{label}</button>)}{!solar&&<button aria-label={motion?'Pause turbines':'Animate turbines'} onClick={()=>setMotion(!motion)}>{motion?<Pause size={14}/>:<Play size={14}/>}</button>}</div>
+    <div className="scene-view-controls">{([{id:'overview',label:'Overview',icon:Maximize},{id:'equipment',label:'Equipment',icon:Box},{id:'plan',label:'Plan view',icon:Layers3}] as const).map(({id,label,icon:Icon})=><button key={id} aria-pressed={view===id} onClick={()=>setView(id)}><Icon size={14}/>{label}</button>)}{!solar&&<button className="scene-motion-toggle" aria-label={motion?'Pause turbines':'Animate turbines'} onClick={()=>setMotion(!motion)}>{motion?<Pause size={14}/>:<Play size={14}/>}</button>}</div>
    </div><div className="design-bottom"><div><span>Indicative investment</span><strong>{money(finance.investment)}</strong></div><div><span>First-year energy</span><strong>{number(finance.firstMWh/(urban?1:1000))} <small>{urban?'MWh':'GWh'}</small></strong></div><button onClick={()=>setTab('economics')}>Explore the economics<ArrowRight size={16}/></button></div></div>
    <aside className="design-inspector"><div className="inspector-heading">{solar?<Sun size={20}/>:<Wind size={20}/>}<div><span>THE BUILD CONCEPT</span><h3>{solar?'Every row, accounted for.':'A turbine-by-turbine view.'}</h3></div></div>
     <div className="equipment-count"><strong>{number(layout.points.length,0)}</strong><span>{urban?'solar modules':solar?'panel tables':'wind turbines'}</span></div>
     <dl className="design-specs">{(solar?[
      ['Modules',`${number(layout.moduleCount,0)} × 650 W`],['DC array capacity',`${number(layout.moduleCount*.00065,2)} MW DC`],[urban?'Module dimensions':'Table dimensions',urban?'1.3 × 2.4 m · 650 W':'26 × 4.8 m · 40 modules'],['Mounting',urban?`${layout.tilt}° · aligned to footprint`:'Fixed tilt · 25° south-facing'],['DC / AC ratio','1.30'],['Module row pitch',`${layout.rowPitch.toFixed(2)} m`],
     ]:[['Turbine rating','6 MW each'],['Hub height','115 m'],['Rotor diameter','170 m'],['Maximum tip height','200 m'],['Lateral / longitudinal',`${windSpacing}D / ${windSpacing+2}D`],['Center spacing',`${number(layout.spacingX,0)} × ${number(layout.spacingZ,0)} m`]]).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}<div><dt>Screening footprint</dt><dd>{number(layout.areaHa,2)} ha</dd></div><div><dt>Original capacity estimate</dt><dd>{number(c.capacity_mw,3)} MW</dd></div></dl>
-    {c.surface_type!=='parking_canopy'&&c.surface_type!=='parking_deck'&&<label className="design-range"><span>{solar?'Adjust row spacing':'Adjust turbine spacing'}<b>{solar?`${rowPitch} m`:`${windSpacing}D`}</b></span><input aria-label={solar?'Panel row spacing':'Turbine spacing'} type="range" min={urban?2.8:solar?8:4} max={urban?6:solar?22:8} step={urban?.2:solar?1:.5} value={solar?rowPitch:windSpacing} onChange={e=>solar?setRowPitch(Number(e.target.value)):setWindSpacing(Number(e.target.value))}/></label>}
-    <label className="design-range lighting-range"><span>Illustrative lighting<Sun size={14}/></span><input aria-label="Illustrative lighting" type="range" min={8} max={17} step={1} value={sunHour} onChange={e=>setSunHour(Number(e.target.value))}/><small>Morning <span>Evening</span></small></label>
+    {c.surface_type!=='parking_canopy'&&c.surface_type!=='parking_deck'&&<label className="design-range"><span>{solar?'Adjust row spacing':'Adjust turbine spacing'}<b>{solar?`${rowPitch} m`:`${windSpacing}D`}</b></span><input aria-label={solar?'Panel row spacing':'Turbine spacing'} type="range" min={spacingMin} max={spacingMax} step={urban?.2:solar?1:.5} value={spacingValue} style={sliderFill(spacingValue,spacingMin,spacingMax)} onChange={e=>solar?setRowPitch(Number(e.target.value)):setWindSpacing(Number(e.target.value))}/></label>}
+    <label className="design-range lighting-range"><span>Illustrative lighting<Sun size={14}/></span><input aria-label="Illustrative lighting" type="range" min={8} max={17} step={1} value={sunHour} style={sliderFill(sunHour,8,17)} onChange={e=>setSunHour(Number(e.target.value))}/><small>Morning <span>Evening</span></small></label>
     {shortfall>(urban?.001:.05)&&<div className="studio-note amber-note"><Info size={15}/><p>{number(layout.capacityMW,2)} MW fits this spacing and whole-unit layout, below the {number(c.capacity_mw,3)} MW screening estimate. Economics use the smaller concept capacity.</p></div>}
     {!layout.points.length&&<div className="studio-note amber-note"><Info size={15}/><p>No complete units fit these dimensions. Reduce spacing or choose another site.</p></div>}
     <div className="included-items"><span><Check size={12}/>Footprint boundary & setbacks</span><span><Check size={12}/>{urban?'Aligned array blocks with access gaps':'6 m concept access corridors'}</span><span><Check size={12}/>{urban?'Illustrative roof / canopy mounting':'Substation and electrical equipment'}</span></div>

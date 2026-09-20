@@ -21,6 +21,7 @@ export function rerank(source: Result, plan: Plan): Result {
   if(plan.constraints.zero_new_land && (!c.developed_surface_verified || c.technology!=='solar')) reasons.push('No verified developed footprint');
   if(c.capacity_mw<plan.constraints.min_capacity_mw) reasons.push('Minimum capacity');
   if(c.excluded_land_cover) reasons.push('Incompatible land cover');
+  reasons.push(...(c.screening_reasons||[]));
   if(reasons.length) {excluded.push({...c,selected:false,exclusion_reasons:reasons});continue;}
   c.score = Math.round(keys.reduce((n,k)=>n+c.components[k]*(total?plan.weights[k]:1),0)/(total||keys.length)*100)/100;
   c.exclusion_reasons=[];candidates.push(c);

@@ -209,8 +209,8 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
   <div ref={host} className="map-canvas" aria-label="Interactive energy candidate map"/>
   <div className="map-vignette"/>
   {mapError&&<div className="map-fallback"><Satellite size={32}/><p>Interactive map unavailable</p><small>Your browser needs WebGL. Ranked sites and evidence remain available below.</small></div>}
-  <div className="map-topline"><span className="map-eyebrow"><span className="live-dot"/> CITY ENERGY WORKSPACE</span><span className="coordinate-label">{Math.abs(viewCenter[1]).toFixed(2)}° {viewCenter[1]>=0?'N':'S'} / {Math.abs(viewCenter[0]).toFixed(2)}° {viewCenter[0]>=0?'E':'W'}</span></div>
-  <div className="map-title"><span>FROM ORBIT TO OPPORTUNITY</span><h2>{city?.name||REGIONS[busy?journey.region:region].short}</h2><p>{busy?'Exploring the search area…':'Renewable opportunities inside city limits.'}</p></div>
+  <div className="map-topline"><span className="map-eyebrow"><span className="live-dot"/> {city?.scope==='regional'?'REGIONAL ENERGY WORKSPACE':'CITY ENERGY WORKSPACE'}</span><span className="coordinate-label">{Math.abs(viewCenter[1]).toFixed(2)}° {viewCenter[1]>=0?'N':'S'} / {Math.abs(viewCenter[0]).toFixed(2)}° {viewCenter[0]>=0?'E':'W'}</span></div>
+  <div className="map-title"><span>FROM ORBIT TO OPPORTUNITY</span><h2>{city?.name||REGIONS[busy?journey.region:region].short}</h2><p>{busy?'Exploring the search area…':city?.scope==='regional'?`Renewable opportunities within ${city.radius_km} km.`:'Renewable opportunities inside city limits.'}</p></div>
   {journeyPhase==='surveying'&&<><div className="survey-reticle" aria-hidden="true"><i/><i/><span/></div><div className="journey-caption"><span className="live-dot"/>Exploring the search area<button onClick={()=>{tourFinished.current=true;clearTimers();map.current?.stop();settle();}}>Skip flight <Check size={13}/></button></div></>}
   {buildings&&buildingStatus.includes('unavailable')&&<div className="city-building-status"><Building2 size={13}/><span>{buildingStatus}</span></div>}
   <div className="map-tools">

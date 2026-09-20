@@ -47,7 +47,7 @@ def solar_resource(lon,lat):
     cache.set(key,result)
     return result
 
-def analyze(plan, boundary=None, technologies=None):
+def analyze(plan, boundary=None, technologies=None, grid_size=5):
     import ee
     project=os.getenv('EARTH_ENGINE_PROJECT')
     if not project: raise ValueError('Set EARTH_ENGINE_PROJECT and authenticate Earth Engine.')
@@ -73,9 +73,9 @@ def analyze(plan, boundary=None, technologies=None):
     else:
         ground=load_ground(ground_path,'HIFLD');protected=load_ground(protected_path,'PAD-US')
     cells=[]
-    for y in range(5):
-        for x in range(5):
-            lon=w+(x+.5)*(e-w)/5; lat=s+(y+.5)*(n-s)/5
+    for y in range(grid_size):
+        for x in range(grid_size):
+            lon=w+(x+.5)*(e-w)/grid_size; lat=s+(y+.5)*(n-s)/grid_size
             # Fixed 2 km x 2 km screening footprint (4 km²), approximate geographic cell.
             dx=1/(111.32*math.cos(math.radians(lat))); dy=1/111.32
             footprint=box(lon-dx,lat-dy,lon+dx,lat+dy)

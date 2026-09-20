@@ -114,7 +114,7 @@ def local_geometry(index,window):
     ids=index.query(window,predicate='intersects')
     return unary_union([index.geometries[i].intersection(window) for i in ids])
 
-def discover(request:UrbanRequest, supplied=None, city_boundary=None):
+def discover(request:UrbanRequest, supplied=None, city_boundary=None, screening_limit=250):
     raw,cache_hit=supplied if supplied is not None else fetch_osm(request.bounds)
     bounds=box(*request.bounds); center=bounds.centroid
     project=Transformer.from_crs(4326,CRS.from_proj4(f'+proj=aeqd +lat_0={center.y} +lon_0={center.x} +datum=WGS84 +units=m'),always_xy=True).transform
@@ -136,7 +136,7 @@ def discover(request:UrbanRequest, supplied=None, city_boundary=None):
             skipped+=1;continue
         accepted.add(i);unique.append(item)
     choices=[c for c in unique if request.surface=='all' or c['surface']==request.surface]
-    choices.sort(key=lambda c:-c['area']); omitted=max(0,len(choices)-250);choices=choices[:250]
+    choices.sort(key=lambda c:-c['area']); omitted=max(0,len(choices)-screening_limit);choices=choices[:screening_limit]
     if not choices: raise ValueError('No complete mapped surfaces of at least 200 m² were found in this area. Try another neighborhood or surface type.')
     if request.region == 'us':
         from .national_ground import local_ground
@@ -178,6 +178,6 @@ def discover(request:UrbanRequest, supplied=None, city_boundary=None):
                 'Energy uses NASA POWER climatology with an assumed 0.8 performance ratio. Site yield needs an engineering model.',
                 'HIFLD proximity is to transmission, not local distribution capacity. Building height may be assumed; roof geometry is illustrative.']})
     return candidates,{'surface':request.surface,'cache_hit':cache_hit,'retrieved_at':raw['retrieved_at'],'source_timestamp':timestamp,'skipped':skipped,'omitted':omitted,
-        'note':f'{len(candidates)} mapped surfaces screened; {skipped} small, overlapping, or boundary-crossing footprints omitted. '+(f'Only the 250 largest of {len(candidates)+omitted} matching surfaces are shown.' if omitted else 'OpenStreetMap coverage may be incomplete.')}
+        'note':f'{len(candidates)} mapped surfaces screened; {skipped} small, overlapping, or boundary-crossing footprints omitted. '+(f'Only the {screening_limit} largest of {len(candidates)+omitted} matching surfaces are shown.' if omitted else 'OpenStreetMap coverage may be incomplete.')}
 
 OSM_DATASET={'id':'osm-urban','name':'OpenStreetMap urban surfaces','provider':'OpenStreetMap contributors','sensor':'Mapped building and parking geometry','space_derived':False,'access_method':'Overpass API','asset_id':None,'resolution_m':None,'vintage':'Timestamp retained per search','variables':['building footprints','parking footprints','height tags'],'metrics':['mapped area','surface classification'],'energy_types':['solar'],'source_url':'https://www.openstreetmap.org/copyright','description':'Existing building and parking polygons, queried in the visible neighborhood. © OpenStreetMap contributors, ODbL.','limitations':'Coverage and tags vary. Mapped surface does not establish structural suitability, available area, permission or interconnection capacity.'}

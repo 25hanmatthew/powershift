@@ -28,8 +28,9 @@ def parse_query(query):
     text=query.strip().rstrip('.?!')
     if re.search(r'\b(geothermal|hydro(?:power|electric)?|biomass|tidal|wave)\b',text,re.I):
         raise ValueError('Solar and onshore wind screening are available. Hydro needs flow/head and habitat data; geothermal needs subsurface resource and well data. Those options are not yet screened.')
+    regional=bool(re.search(r'\b(surrounding|nearby areas)\b',text,re.I))
     wind=bool(re.search(r'\b(wind|turbines?)\b',text,re.I))
-    if wind and re.search(r'\b(rooftops?|roofs?|parking|solar)\b',text,re.I):
+    if not regional and wind and re.search(r'\b(rooftops?|roofs?|parking|solar)\b',text,re.I):
         raise ValueError('Wind screening is for land-based sites. Search wind separately from rooftop or parking solar, for example “3 wind sites in Reno, NV”.')
     match=re.search(r'\b(?:in|within|around|near)\s+(?:the city of\s+)?(.+)',text,re.I)
     if match:
@@ -38,18 +39,22 @@ def parse_query(query):
         city=text
     else:
         raise ValueError('Include a city name, for example “Find the 5 best rooftops for solar in Sacramento, CA”.')
+    if regional:
+        city=re.split(r'\s+(?:and|&)\s+(?:the\s+)?(?:surrounding|nearby)',city,flags=re.I)[0].strip()
     city=re.sub(r'^(?:downtown|city of)\s+','',city,flags=re.I)
     if not re.fullmatch(r"[A-Za-zÀ-ÿ .,'-]{2,80}",city):
         raise ValueError('Use a city name and optional state, such as “Sacramento, CA”.')
     limit_match=re.search(r'(?:^|\b(?:top|best|show(?: me)?|find(?: the)?)\s+)(\d+)\s*(?:best\s+)?(?:rooftops?|roofs?|sites?|locations?|parking|solar|results?|options?)?',text,re.I)
-    limit=int(limit_match[1]) if limit_match and not re.match(r'\s*(?:MW|GW|kW|megawatts?)\b',text[limit_match.end(1):],re.I) else 5
+    limit=int(limit_match[1]) if limit_match and not re.match(r'\s*(?:MW|GW|kW|megawatts?)\b',text[limit_match.end(1):],re.I) else (8 if regional else 5)
     if not 1<=limit<=20: raise ValueError('Ask for between 1 and 20 recommendations; the default is 5.')
     power=re.search(r'\b(\d+(?:\.\d+)?)\s*(MW|GW|kW|megawatts?)\b',text,re.I)
     target=float(power[1])*({'gw':1000,'kw':.001}.get(power[2].lower(),1)) if power else None
     if target is not None and not 0<target<=10000: raise ValueError('Capacity must be above zero and at most 10,000 MW.')
     roof=bool(re.search(r'\broof(?:top)?s?\b',text,re.I));parking=bool(re.search(r'\b(parking|canop(?:y|ies)|carports?)\b',text,re.I))
     surface='all' if roof and parking else 'rooftop' if roof else 'parking_deck' if re.search(r'\b(decks?|garages?|structures?)\b',text,re.I) else 'parking_canopy' if parking else 'all'
-    return {'city':city,'limit':limit,'target_mw':target,'surface':surface,'technology':'wind' if wind else 'solar'}
+    solar=bool(re.search(r'\bsolar\b',text,re.I)) or roof or parking
+    technology=('auto' if (wind and solar) or not (wind or solar) else 'wind' if wind else 'solar') if regional else 'wind' if wind else 'solar'
+    return {'city':city,'limit':limit,'target_mw':target,'surface':surface,'technology':technology,'scope':'regional' if regional else 'city'}
 
 def resolve_city(name):
     state=None;clean=re.sub(r'\bD\.C\.?$', 'DC', name.strip(), flags=re.I)
@@ -105,6 +110,9 @@ def resolve_city(name):
 
 def search_city(query):
     parsed=parse_query(query);city=resolve_city(parsed['city']);w,s,e,n=city['bounds']
+    if parsed['scope']=='regional':
+        from .regional_search import search_region
+        return search_region(query,parsed,city)
     if parsed['technology']=='wind': return search_city_wind(query,parsed,city)
     # Focus public/commercial roof tags and parking across the city, keeping public Overpass queries bounded.
     roof_types='commercial|industrial|retail|warehouse|office|school|hospital|university|public|civic|government|college|hotel|sports_centre|supermarket|parking'

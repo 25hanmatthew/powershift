@@ -87,10 +87,10 @@ async def city_search(request:CitySearchRequest):
         raise HTTPException(502,'Live city data is unavailable. Retry the search; no demonstration data was substituted.') from None
     run_id=uuid.uuid4().hex;now=datetime.now(timezone.utc).isoformat()
     output={**ranked,'city':city,'urban_summary':summary,'run_id':run_id,'plan':plan.model_dump(),
-        'datasets':([d for d in REGISTRY if d['id'] in ('era5','worldcover','copdem' if city['bounds'][3]>=60 else 'srtm','viirs','hifld','padus')] if plan.technology=='wind' else [OSM_DATASET,*[d for d in REGISTRY if d['id'] in ('power','hifld','padus')]]),
-        'explanation':summary['note'],'telemetry':[{'stage':'analysis','provider':'U.S. Census / Earth Engine / HIFLD / PAD-US' if plan.technology=='wind' else 'U.S. Census / OpenStreetMap / NASA POWER / HIFLD / PAD-US','status':'live city screening','earth_engine_executions':summary.get('earth_engine_executions',0)}],
+        'datasets':([d for d in [*REGISTRY,OSM_DATASET] if d['id'] in summary['dataset_ids']] if summary.get('dataset_ids') else [d for d in REGISTRY if d['id'] in ('era5','worldcover','copdem' if city['bounds'][3]>=60 else 'srtm','viirs','hifld','padus')] if plan.technology=='wind' else [OSM_DATASET,*[d for d in REGISTRY if d['id'] in ('power','hifld','padus')]]),
+        'explanation':summary['note'],'telemetry':[{'stage':'analysis','provider':'U.S. Census / OpenStreetMap / NASA POWER / Earth Engine / HIFLD / PAD-US' if city.get('scope')=='regional' else 'U.S. Census / Earth Engine / HIFLD / PAD-US' if plan.technology=='wind' else 'U.S. Census / OpenStreetMap / NASA POWER / HIFLD / PAD-US','status':'live city screening','earth_engine_executions':summary.get('earth_engine_executions',0)}],
         'mode':'live','cache_hit':summary['cache_hit'],'analysis_timestamp':summary['retrieved_at'],'generated_at':now,
-        'duration_ms':round((time.perf_counter()-started)*1000),'data_notice':f"LIVE · {city['name']}, {city['state']} · within city boundary"}
+        'duration_ms':round((time.perf_counter()-started)*1000),'data_notice':f"LIVE · {city['name']}, {city['state']} · {str(city['radius_km'])+' km regional radius' if city.get('scope')=='regional' else 'within city boundary'}"}
     Cache().set('run:'+run_id,{'result':output,'physical':physical})
     return output
 

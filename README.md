@@ -4,6 +4,14 @@ Earth-observation energy planning with a React/TypeScript workspace and a Python
 
 The app includes a satellite map, solar/wind portfolio screening, text and OpenAI voice input entry, a five-step progress stream, editable priorities, geographic boundaries, hard constraints, source-level evidence, saved scenarios, GeoJSON export, and service traces.
 
+## Sacramento regional demo
+
+The default request is “What is the best way to increase renewable energy in Sacramento, CA and surrounding areas?” It compares rooftop solar, parking solar, ground-mounted solar and onshore wind inside a clearly labeled 40 km radius around the resolved Census city center. Requests containing “surrounding areas” or “nearby areas” use this regional search; ordinary city requests retain city boundaries.
+
+The pipeline screens the 500 largest matching mapped urban surfaces and a 7 × 7 grid of potential 2 km land cells, retaining only complete cells within the radius. It uses OSM, NASA POWER, WorldCover, ERA5, SRTM/Copernicus elevation, VIIRS, national HIFLD and PAD-US. The sidebar reports each approach's eligible count, best initial score and exclusion reasons, with eight distinct shortlisted locations by default. Scores balance resource, environment, grid proximity, buildability and land reuse; they do not optimize project economics. Land cells that overlap screened urban surfaces are excluded to prevent double-counting. Wind must meet a 5.8 m/s mean 100 m wind threshold; land cells must have no more than 5% built-up cover.
+
+The first regional request can take several minutes. Successful physical observations are cached independently for reuse; mapped surfaces refresh after seven days. External failures do not substitute synthetic data. The regional comparison is a sample, not a complete inventory of available parcels, and the existing site design, economics and builder tools remain available from the shortlist. ISD/PUDL research remains separate from live site rankings while model validation limits apply.
+
 ## Run locally
 
 Requires Node.js 20.19+ or 22.12+ and Python 3.12+. From this directory on Windows:
