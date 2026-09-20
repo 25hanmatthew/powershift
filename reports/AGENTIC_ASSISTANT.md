@@ -4,6 +4,8 @@ Implemented in the isolated `codex/llm-pipeline` worktree. This adds a tool-usin
 
 ## User flow
 
+The main search bar, initial Sacramento request, Sacramento shortcut, and Run space analysis button all submit to the sidebar conversation with explicit search intent. There is no independent browser call to the city-search endpoint. The agent uses the displayed planning preferences and invokes the existing city search as a tool; essential clarifications and failures remain in chat.
+
 Ask a question about the current shortlist or selected site, compare sites, request a priority/constraint change, or ask for a new US city search. The assistant can chain tool calls, displays its action status, and returns an explanation with checked source links and selectable site cards. Successful scenarios update the map and planning controls together. Switching sites, changing the current analysis, or pressing Stop cancels the active conversation turn.
 
 Examples:
@@ -55,7 +57,7 @@ $env:POWERSHIFT_API_URL='http://127.0.0.1:8013'
 npm run dev -- --port 5182
 ```
 
-Configure live dataset paths/services as described in the project README. Without an OpenAI key the chat reports its unavailability; it does not simulate an AI answer. Normal Sites workflows remain available.
+Configure live dataset paths/services as described in the project README. Without an OpenAI key the chat reports its unavailability; it does not simulate an AI answer. Existing loaded site details and saved scenarios remain available; new searches require the assistant connection.
 
 ## Behavior and limits
 
@@ -69,9 +71,9 @@ Configure live dataset paths/services as described in the project README. Withou
 
 ## Verification
 
-Backend coverage includes chained tools, real comparison calculations, immutable original scenarios, invalid arguments, citation repair, current UI preferences, search validation and preference preservation, service failure, action limits, and SSE. Frontend tests cover fragmented UTF-8/SSE and error propagation.
+Backend coverage includes chained tools, real comparison calculations, immutable original scenarios, invalid arguments, citation repair, current UI preferences, search validation and preference preservation, service failure, action limits, and SSE. Frontend tests cover fragmented UTF-8/SSE, error propagation, initial/main-bar submissions through the real chat component, map updates, missing-key behavior, cancellation of late results, and deliberate repeated submissions. jsdom is a development-only test dependency.
 
-The complete backend suite passed after the final change (189 passed, five artifact-dependent skips), including all 17 assistant tests. All 64 frontend tests and the production build passed. Browser verification used a real OpenAI key against an isolated API/cache with a saved analysis snapshot replayed for initial loading: comparison returned checked sources, grid priority 80 changed scores from 82.6 to 89.1, and a cited site opened its 3D details. Desktop and 390px mobile layouts were inspected. A new external-data city collection was not executed in this preview; its dispatch and preservation behavior are covered by tests.
+The complete backend suite passed after the final change (191 passed, five artifact-dependent skips), including all 19 assistant tests. All 68 frontend tests and the production build passed. Browser verification used a real OpenAI key against an isolated API/cache with a saved analysis snapshot replayed for initial loading: comparison returned checked sources, grid priority 80 changed scores from 82.6 to 89.1, and a cited site opened its 3D details. Desktop and 390px mobile layouts were inspected. The main-search follow-up was also exercised with the real LLM and a replayed search-tool result from that saved analysis. It invoked search_sites and updated the map and conversation. New external-data collection was not executed in this preview; dispatch and preference preservation are covered by tests.
 
 ## Handoff
 

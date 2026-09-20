@@ -139,6 +139,21 @@ def test_new_location_keeps_current_priorities_and_constraints(saved):
     assert Cache().get('run:test-run')['data']['result'] == saved
 
 
+def test_main_search_starts_from_displayed_preferences_without_existing_run(monkeypatch, saved):
+    view = {k: copy.deepcopy(saved['plan'][k]) for k in ('weights', 'constraints', 'target_mw', 'technology')}
+    view['weights']['grid'] = 75
+    provider = AsyncMock(side_effect=[tool('search_sites', dict(city='Sacramento', state='CA', technology='auto', surface='all', scope='regional', limit=8, target_mw=None)), answer()])
+    monkeypatch.setattr(assistant, 'model_response', provider)
+    search = AsyncMock(return_value=saved)
+    reply, _ = run(ChatRequest(message='Find renewable sites in Sacramento, CA and surrounding areas.', intent='search', view=view), search)
+    assert reply['result']['plan']['weights']['grid'] == 75
+    assert reply['result']['plan']['target_mw'] == view['target_mw']
+    items = provider.call_args.args[0]
+    assert any('main site search' in i.get('content', '') for i in items if i.get('role') == 'developer')
+    assert any('planning_preferences' in i.get('content', '') for i in items if i.get('role') == 'developer')
+    search.assert_awaited_once()
+
+
 @pytest.mark.parametrize('change', [{'state': 'XX'}, {'technology': 'auto'}, {'technology': 'wind', 'surface': 'rooftop'}])
 def test_unsupported_search_does_not_call_data_service(saved, change):
     search = AsyncMock()
@@ -154,6 +169,15 @@ def test_current_ui_preferences_are_used_in_evidence(saved):
     state = Investigation(ChatRequest(message='Explain.', run_id='test-run', view=view), AsyncMock())
     assert state.analysis()['plan']['weights']['grid'] == 85
     assert Cache().get('run:test-run')['data']['result'] == saved
+
+
+def test_shortlist_summary_covers_all_sites_not_just_citations(saved):
+    state = Investigation(ChatRequest(message='Summarize.', run_id='test-run'), AsyncMock())
+    summary = state.analysis()['shortlist_summary']
+    assert summary['count'] == len(saved['candidates'])
+    assert sum(summary['technology_counts'].values()) == len(saved['candidates'])
+    assert summary['capacity_min_mw'] == min(c['capacity_mw'] for c in saved['candidates'])
+    assert summary['capacity_max_mw'] == max(c['capacity_mw'] for c in saved['candidates'])
 
 
 def test_sse_route_streams_actions_and_checked_reply(monkeypatch, saved):

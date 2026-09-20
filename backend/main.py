@@ -64,7 +64,7 @@ async def supplier_search(request:SupplierRequest):
 @app.post('/api/assistant/chat')
 async def assistant_chat(request:ChatRequest):
     if not os.getenv('OPENAI_API_KEY'):
-        raise HTTPException(503,'The assistant needs OPENAI_API_KEY configured on the server. Site search remains available.')
+        raise HTTPException(503,'The assistant needs OPENAI_API_KEY configured on the server. Configure it and retry; your current map is unchanged.')
     if not request.message.strip():
         raise HTTPException(422,'Enter a question or planning request.')
     async def search(query):
