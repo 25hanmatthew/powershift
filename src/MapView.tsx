@@ -28,14 +28,12 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
  const drawingRef=useRef(false); const selectRef=useRef(onSelect); selectRef.current=onSelect;
  const [viewZoom,setViewZoom]=useState(14);const [journeyPhase,setJourneyPhase]=useState('idle');const [viewCenter,setViewCenter]=useState([-120,39.4]);
  const fittedRegion=useRef(region);
- const timers=useRef<ReturnType<typeof setTimeout>[]>([]);const flightActive=useRef(false);const reviewedResult=useRef('');const reviewPopup=useRef<maplibregl.Popup|null>(null);
+ const timers=useRef<ReturnType<typeof setTimeout>[]>([]);const flightActive=useRef(false);const reviewedResult=useRef('');
  const reviewCallbacks=useRef({onReviewStep,onReviewComplete});reviewCallbacks.current={onReviewStep,onReviewComplete};
- const [reviewPosition,setReviewPosition]=useState(0);
 
  const reduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
  const clearTimers=()=>{timers.current.forEach(clearTimeout);timers.current=[];};
  const clearReview=()=>{
-  reviewPopup.current?.remove();reviewPopup.current=null;
   const source=map.current?.getSource('review-site') as GeoJSONSource|undefined;
   source?.setData({type:'FeatureCollection',features:[]});
  };
@@ -107,16 +105,9 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
   setJourneyPhase('reviewing');
   const visit=(index:number)=>{
    const stop=review.stops[index];const c=stop.candidate;
-   setReviewPosition(index);reviewCallbacks.current.onReviewStep(index);clearReview();
+   reviewCallbacks.current.onReviewStep(index);clearReview();
    (instance.getSource('review-site') as GeoJSONSource)?.setData({type:'FeatureCollection',features:[{type:'Feature',geometry:c.geometry as GeoJSON.Polygon,properties:{color:stop.excluded?'#deb67e':'#c6ed8c'}}]});
-   const card=document.createElement('div');card.setAttribute('role','status');
-   const append=(tag:string,cls:string,text:string)=>{const el=document.createElement(tag);el.className=cls;el.textContent=text;card.appendChild(el);};
-   append('span','review-bubble-label',`SITE REVIEW · ${index+1} / ${review.stops.length}`);
-   append('h3','review-bubble-title',c.name);
-   append('div','review-bubble-verdict',stop.label);
-   stop.facts.forEach(f=>append('p','review-bubble-fact',f));
-   reviewPopup.current=new maplibregl.Popup({closeButton:false,closeOnClick:false,focusAfterOpen:false,anchor:'bottom',offset:23,maxWidth:'300px',className:stop.excluded?'site-review-popup is-rejected':'site-review-popup'}).setLngLat([c.longitude,c.latitude]).setDOMContent(card).addTo(instance);
-   instance.flyTo({center:[c.longitude,c.latitude],zoom:c.surface_type?16:11.6,pitch:c.surface_type?40:30,bearing:[-16,12,-8,0][index%4],padding:{top:0,bottom:0,left:0,right:0},offset:[0,window.innerWidth<721?65:95],duration:350,essential:false});
+   instance.flyTo({center:[c.longitude,c.latitude],zoom:c.surface_type?16:11.6,pitch:c.surface_type?40:30,bearing:[-16,12,-8,0][index%4],padding:{top:0,bottom:0,left:0,right:0},offset:[0,0],duration:350,essential:false});
   };
   visit(0);
   review.stops.slice(1).forEach((_,index)=>timers.current.push(setTimeout(()=>visit(index+1),(index+1)*REVIEW_STOP_MS)));
@@ -221,7 +212,6 @@ export default function MapView({selectedEquipment,onEquipmentSelect,city,siteLa
   {mapError&&<div className="map-fallback"><Satellite size={32}/><p>Interactive map unavailable</p><small>Your browser needs WebGL. Ranked sites and evidence remain available below.</small></div>}
   <div className="map-topline"><span className="map-eyebrow"><span className="live-dot"/> {city?.scope==='regional'?'REGIONAL ENERGY WORKSPACE':'CITY ENERGY WORKSPACE'}</span><span className="coordinate-label">{Math.abs(viewCenter[1]).toFixed(2)}° {viewCenter[1]>=0?'N':'S'} / {Math.abs(viewCenter[0]).toFixed(2)}° {viewCenter[0]>=0?'E':'W'}</span></div>
   <div className="map-title"><span>FROM ORBIT TO OPPORTUNITY</span><h2>{city?.name||REGIONS[region].short}</h2><p>{busy?'Exploring the search area…':city?.scope==='regional'?`Renewable opportunities within ${city.radius_km} km.`:'Renewable opportunities inside city limits.'}</p></div>
-  {review&&<div className="map-review-caption" role="status"><span className="live-dot"/>Reviewing site {reviewPosition+1} of {review.stops.length}<button onClick={cancelFlight}>Show results <Check size={13}/></button></div>}
   {buildings&&buildingStatus.includes('unavailable')&&<div className="city-building-status"><Building2 size={13}/><span>{buildingStatus}</span></div>}
   <div className="map-tools">
    <button title="3D buildings" aria-label="3D buildings" aria-pressed={buildings} onClick={()=>{setBuildings(!buildings);if(!buildings)map.current?.easeTo({pitch:55,duration:reduced()?0:700});}}><Building2 size={18}/></button>

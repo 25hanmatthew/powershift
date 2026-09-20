@@ -36,25 +36,25 @@ function services(chat:()=>Response,configured=true){
  vi.stubGlobal('fetch',fetcher);return fetcher;
 }
 
-it('routes initial and main-bar searches through one conversation and applies the agent result',async()=>{
+it('routes initial and assistant searches through one conversation and applies the agent result',async()=>{
  const first=stream(),second=stream();let calls=0;
  const fetcher=services(()=>++calls===1?first.response:second.response);
  await act(async()=>root.render(<App/>));
  expect(calls).toBe(1);
  expect(host.textContent).toContain(REGIONAL_DEMO_PLAN.query);
- expect((host.querySelector('.search-submit') as HTMLButtonElement).disabled).toBe(true);
+ expect(host.querySelector('.map-search')).toBeNull();
  const body=()=>JSON.parse((fetcher.mock.calls.filter(([url])=>url==='/api/assistant/chat').at(-1) as unknown as [string,RequestInit])[1].body as string);
  expect(body().message).toBe(REGIONAL_DEMO_PLAN.query);
  expect(body().intent).toBe('search');
  expect(body().view.weights).toEqual(REGIONAL_DEMO_PLAN.weights);
  await act(async()=>{first.emit(reply);first.close();});
- expect((host.querySelector('.search-submit') as HTMLButtonElement).disabled).toBe(false);
- const input=host.querySelector('input[aria-label="Energy planning request"]') as HTMLInputElement;
+ expect(host.querySelector('[aria-label="Stop assistant"]')).toBeNull();
+ const input=host.querySelector('#assistant-question') as HTMLTextAreaElement;
  await act(async()=>{
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'Find 5 solar rooftops in Davis, CA');
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(input,'Find 5 solar rooftops in Davis, CA');
   input.dispatchEvent(new Event('input',{bubbles:true}));
  });
- await act(async()=>host.querySelector('.map-search')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await act(async()=>host.querySelector('.assistant-composer')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  expect(calls).toBe(2);
  expect(body().message).toBe('Find 5 solar rooftops in Davis, CA');
  expect(body().history).toHaveLength(2);
@@ -103,12 +103,15 @@ it('keeps the map review active after the assistant finishes, then restores the 
  const result={run_id:'reviewed-agent-search',plan:REGIONAL_DEMO_PLAN,candidates:[candidate],excluded:[],selected_ids:['roof'],portfolio:{},datasets:[],verification:[],telemetry:[],mode:'live',explanation:'Measured results'} as unknown as Result;
  await act(async()=>{pending.emit({...reply,result});pending.close();});
  expect(host.querySelector('[data-testid="map"]')?.getAttribute('data-review-count')).toBe('1');
- expect(host.querySelector('#sites-tab')?.getAttribute('aria-selected')).toBe('true');
- expect((host.querySelector('.search-submit') as HTMLButtonElement).disabled).toBe(true);
- expect(host.querySelector('.review-sidebar')?.textContent).toContain('Measured rooftop');
+ expect(host.querySelector('#assistant-tab')?.getAttribute('aria-selected')).toBe('true');
+ expect(host.querySelector('.map-search')).toBeNull();
+ expect(host.querySelector('#assistant-view .assistant-site-review')?.textContent).toContain('Measured rooftop');
+ expect(host.querySelector('.assistant-conversation')?.textContent).not.toContain(reply.answer);
  await act(async()=>Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='Complete test tour')!.click());
- expect((host.querySelector('.search-submit') as HTMLButtonElement).disabled).toBe(false);
- expect(host.querySelector('.review-sidebar')).toBeNull();
+ expect(host.querySelector('[aria-label="Stop assistant"]')).toBeNull();
+ expect(host.querySelector('#assistant-view .assistant-site-review')).toBeNull();
+ expect(host.querySelector('#sites-tab')?.getAttribute('aria-selected')).toBe('true');
  expect(host.querySelector('.site-cards')?.textContent).toContain('Measured rooftop');
+ expect(host.querySelector('.assistant-conversation')?.textContent).toContain(reply.answer);
  expect(host.querySelector('[data-testid="map"]')?.getAttribute('data-run')).toBe('reviewed-agent-search');
 });

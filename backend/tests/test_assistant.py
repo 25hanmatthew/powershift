@@ -225,3 +225,21 @@ def test_nonfinite_or_extra_mutations_rejected():
         RerankArgs(weights={'grid': float('nan')}, constraints=None, technology=None, target_mw=None)
     with pytest.raises(ValidationError):
         RerankArgs(weights=None, constraints={'exclude_protected': False}, technology=None, target_mw=None)
+
+
+def test_repeated_planning_question_in_chat_must_search_before_answering(monkeypatch, saved):
+    query = 'What is the best way to increase renewable energy in Sacramento, CA and surrounding areas?'
+    provider = AsyncMock(side_effect=[answer('Reuse the old recommendation.'), tool('search_sites', dict(city='Sacramento', state='CA', technology='auto', surface='all', scope='regional', limit=8, target_mw=None)), answer('Reviewed the current sites.')])
+    monkeypatch.setattr(assistant, 'model_response', provider)
+    search = AsyncMock(return_value=saved)
+    reply, events = run(ChatRequest(message=query, run_id='test-run', history=[{'role':'user','content':query},{'role':'assistant','content':'Earlier recommendation.'}]), search)
+    search.assert_awaited_once()
+    assert reply['result'] is not None
+    assert reply['answer'] == 'Reviewed the current sites.'
+    assert any(e['type']=='tool_end' and e['name']=='search_sites' and e['ok'] for e in events)
+    assert provider.await_count == 3
+
+
+@pytest.mark.parametrize('message', ['Explain the best way to increase renewable energy in Sacramento, CA.', 'Why did you find solar sites in Sacramento, CA?', 'Compare the top two solar sites in Sacramento, CA.', 'What is the best way to increase renewable energy?'])
+def test_explanation_and_incomplete_location_do_not_force_search(message):
+    assert not assistant.location_search_request(message)

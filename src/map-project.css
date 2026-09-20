@@ -48,3 +48,6 @@
 .approach-unavailable summary strong{color:#a7afa0;font-size:12px}
 .regional-method{margin-top:14px;font-size:10px;color:#c0d4ad}
 .regional-method summary{cursor:pointer}
+
+.sidebar-open .city-search-caption{top:24px}.map-first .map-topline{top:84px}.map-first .map-title{top:112px}.energy-options-menu{top:130px}
+@media(max-width:720px){.sidebar-open .city-search-caption{top:14px}.map-first .map-topline{top:64px}.map-first .map-title{top:87px}.energy-options-menu{top:110px}}
