@@ -1,0 +1,2 @@
+# Optional national geodatabase import; runtime app dependencies are in backend/requirements.txt.
+pyogrio>=0.10,<1

@@ -1,0 +1,9 @@
+# Optional offline training and validated wind inference.
+duckdb>=1.4,<2
+pandas>=2.2,<3
+pyarrow>=20,<24
+scikit-learn>=1.6,<2
+lightgbm>=4.6,<5
+shap>=0.49,<1
+numpy>=2,<2.4
+rasterio>=1.4,<2

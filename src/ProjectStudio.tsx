@@ -1,0 +1,80 @@
+import { useEffect,useMemo,useState } from 'react';
+import { ArrowDownToLine,ArrowRight,Box,Check,ChartNoAxesCombined,Coins,Info,Layers3,Leaf,Maximize,Pause,Play,RotateCcw,Sun,Wind,Zap,Truck } from 'lucide-react';
+import type { Candidate } from './types';
+import type { SiteLayout } from './siteConcept';
+import { buildLayout,EQUIPMENT } from './siteConcept';
+import { calculateFinance,COST_SOURCE,defaultFinance } from './projectFinance';
+import type { FinanceInputs } from './projectFinance';
+import './project-studio.css';
+
+const number=(n:number,digits=1)=>n.toLocaleString('en-US',{maximumFractionDigits:digits});
+const money=(n:number)=>`${n<0?'−':''}$${number(Math.abs(n)/1e6,2)}m`;
+export default function ProjectStudio({candidate:c,demo,onLayout,onView,onSun,onMotion,onSuppliers}:{candidate:Candidate;demo:boolean;onLayout?:(layout:SiteLayout)=>void;onView?:(view:'overview'|'equipment'|'plan')=>void;onSun?:(hour:number)=>void;onMotion?:(motion:boolean)=>void;onSuppliers?:()=>void}){
+ const [tab,setTab]=useState<'design'|'economics'>('design');const [view,setView]=useState<'overview'|'equipment'|'plan'>('equipment');
+ const urban=Boolean(c.surface_type);const urbanCostSource={name:'Editable urban construction scenario, not a contractor quote',rooftopPerKW:3000,parkingPerKW:4000};
+ const [rowPitch,setRowPitch]=useState(urban?3.2:12);const [windSpacing,setWindSpacing]=useState(5);const [sunHour,setSunHour]=useState(13);const [motion,setMotion]=useState(true);
+ const [inputs,setInputs]=useState(()=>defaultFinance(c.technology,c.surface_type));
+ const layout=useMemo(()=>buildLayout(c,rowPitch,windSpacing),[c,rowPitch,windSpacing]);
+ useEffect(()=>{const timer=setTimeout(()=>onLayout?.(layout),100);return()=>clearTimeout(timer);},[layout,onLayout]);
+ useEffect(()=>{onView?.(view);},[view,onView]);
+ useEffect(()=>{onSun?.(sunHour);},[sunHour,onSun]);
+ useEffect(()=>{onMotion?.(motion);},[motion,onMotion]);
+ const finance=useMemo(()=>calculateFinance(c,layout,inputs),[c,layout,inputs]);
+ const solar=c.technology==='solar';const shortfall=c.capacity_mw-layout.capacityMW;
+ const update=(key:keyof FinanceInputs,value:number)=>setInputs(old=>({...old,[key]:value}));
+ const exportScenario=()=>{
+  const payload={site:{id:c.id,name:c.name,longitude:c.longitude,latitude:c.latitude,geometry:c.geometry,synthetic:demo},
+   concept:{...layout,equipment:urban?{moduleW:650,widthM:1.3,depthM:2.4,tiltDegrees:layout.tilt,alignmentRadians:layout.orientation,dcAc:1.3}:EQUIPMENT,terrain:'Equipment samples Mapterhorn DEM when available; no surveyed grading',terrainSource:'https://mapterhorn.com/attribution',layoutType:'Illustrative, not engineered'},
+   financialAssumptions:inputs,financialResults:finance,costSource:urban?urbanCostSource:COST_SOURCE,
+   exclusions:['No debt, tax, incentives, storage, revenue escalation or merchant price forecast.','Grid upgrades and land-specific costs require quotes.','Avoided emissions are a scenario, not a measured project benefit.'],
+   generatedAt:new Date().toISOString()};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`powershift-concept-${c.id}.json`;a.click();URL.revokeObjectURL(url);
+ };
+ const rows=finance.cashflows;const low=Math.min(0,...rows.map(r=>r.cumulative)),high=Math.max(0,...rows.map(r=>r.cumulative));
+ const y=(v:number)=>165-(v-low)/(high-low||1)*135;
+ const path=rows.map((r,i)=>`${i?'L':'M'}${35+r.year/inputs.years*625},${y(r.cumulative)}`).join(' ');
+ const field=(key:keyof FinanceInputs,label:string,unit:string,min:number,max:number,step:number)=><label className="finance-field" key={key}><span>{label}</span><div><input aria-label={label} type="number" min={min} max={max} step={step} value={inputs[key]} onChange={e=>update(key,Math.max(min,Math.min(max,(key==='years'?Math.round(Number(e.target.value)):Number(e.target.value))||0)))}/><small>{unit}</small></div></label>;
+ return <div className={`project-studio ${onLayout?'on-map':''}`}>
+  <div className="studio-toolbar"><div className="studio-tabs"><button aria-pressed={tab==='design'} onClick={()=>setTab('design')}><Box size={16}/>3D concept</button><button aria-pressed={tab==='economics'} onClick={()=>setTab('economics')}><ChartNoAxesCombined size={16}/>Economics & benefit</button>{onSuppliers&&<button onClick={onSuppliers}><Truck size={15}/>Builders</button>}</div><div className="studio-meta"><span className={`pill ${demo?'amber':''}`}>{demo?'Synthetic site':'Screening footprint'}</span><button aria-label="Export concept and financial scenario" onClick={exportScenario}><ArrowDownToLine size={16}/><span>Export scenario</span></button></div></div>
+  {tab==='design'?<div key="design" className="design-workspace">
+   <div className="scene-column"><div className="scene-wrapper">
+    <div className="scene-heading"><span className="overline">{urban?c.surface_type?.replaceAll('_',' ').toUpperCase():solar?'SOLAR ARRAY':'WIND FARM'} / SPATIAL CONCEPT</span><h3>{number(layout.capacityMW*(urban?1000:1),2)} <small>{urban?'kW':'MW'}{solar?' AC':''}</small></h3><p>{number(c.latitude,4)}° N · {number(Math.abs(c.longitude),4)}° W</p></div>
+    <div className="scene-view-controls">{([{id:'overview',label:'Overview',icon:Maximize},{id:'equipment',label:'Equipment',icon:Box},{id:'plan',label:'Plan view',icon:Layers3}] as const).map(({id,label,icon:Icon})=><button key={id} aria-pressed={view===id} onClick={()=>setView(id)}><Icon size={14}/>{label}</button>)}{!solar&&<button aria-label={motion?'Pause turbines':'Animate turbines'} onClick={()=>setMotion(!motion)}>{motion?<Pause size={14}/>:<Play size={14}/>}</button>}</div>
+   </div><div className="design-bottom"><div><span>Indicative investment</span><strong>{money(finance.investment)}</strong></div><div><span>First-year energy</span><strong>{number(finance.firstMWh/(urban?1:1000))} <small>{urban?'MWh':'GWh'}</small></strong></div><button onClick={()=>setTab('economics')}>Explore the economics<ArrowRight size={16}/></button></div></div>
+   <aside className="design-inspector"><div className="inspector-heading">{solar?<Sun size={20}/>:<Wind size={20}/>}<div><span>THE BUILD CONCEPT</span><h3>{solar?'Every row, accounted for.':'A turbine-by-turbine view.'}</h3></div></div>
+    <div className="equipment-count"><strong>{number(layout.points.length,0)}</strong><span>{urban?'solar modules':solar?'panel tables':'wind turbines'}</span></div>
+    <dl className="design-specs">{(solar?[
+     ['Modules',`${number(layout.moduleCount,0)} × 650 W`],['DC array capacity',`${number(layout.moduleCount*.00065,2)} MW DC`],[urban?'Module dimensions':'Table dimensions',urban?'1.3 × 2.4 m · 650 W':'26 × 4.8 m · 40 modules'],['Mounting',urban?`${layout.tilt}° · aligned to footprint`:'Fixed tilt · 25° south-facing'],['DC / AC ratio','1.30'],['Module row pitch',`${layout.rowPitch.toFixed(2)} m`],
+    ]:[['Turbine rating','6 MW each'],['Hub height','115 m'],['Rotor diameter','170 m'],['Maximum tip height','200 m'],['Lateral / longitudinal',`${windSpacing}D / ${windSpacing+2}D`],['Center spacing',`${number(layout.spacingX,0)} × ${number(layout.spacingZ,0)} m`]]).map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}<div><dt>Screening footprint</dt><dd>{number(layout.areaHa,2)} ha</dd></div><div><dt>Original capacity estimate</dt><dd>{number(c.capacity_mw,3)} MW</dd></div></dl>
+    {c.surface_type!=='parking_canopy'&&c.surface_type!=='parking_deck'&&<label className="design-range"><span>{solar?'Adjust row spacing':'Adjust turbine spacing'}<b>{solar?`${rowPitch} m`:`${windSpacing}D`}</b></span><input aria-label={solar?'Panel row spacing':'Turbine spacing'} type="range" min={urban?2.8:solar?8:4} max={urban?6:solar?22:8} step={urban?.2:solar?1:.5} value={solar?rowPitch:windSpacing} onChange={e=>solar?setRowPitch(Number(e.target.value)):setWindSpacing(Number(e.target.value))}/></label>}
+    <label className="design-range lighting-range"><span>Illustrative lighting<Sun size={14}/></span><input aria-label="Illustrative lighting" type="range" min={8} max={17} step={1} value={sunHour} onChange={e=>setSunHour(Number(e.target.value))}/><small>Morning <span>Evening</span></small></label>
+    {shortfall>(urban?.001:.05)&&<div className="studio-note amber-note"><Info size={15}/><p>{number(layout.capacityMW,2)} MW fits this spacing and whole-unit layout, below the {number(c.capacity_mw,3)} MW screening estimate. Economics use the smaller concept capacity.</p></div>}
+    {!layout.points.length&&<div className="studio-note amber-note"><Info size={15}/><p>No complete units fit these dimensions. Reduce spacing or choose another site.</p></div>}
+    <div className="included-items"><span><Check size={12}/>Footprint boundary & setbacks</span><span><Check size={12}/>{urban?'Aligned array blocks with access gaps':'6 m concept access corridors'}</span><span><Check size={12}/>{urban?'Illustrative roof / canopy mounting':'Substation and electrical equipment'}</span></div>
+    {urban&&<p className="studio-disclaimer"><a href={c.source_url} target="_blank" rel="noreferrer">Mapped source footprint</a> · {number(c.surface_area_m2||0,0)} m² · {number((c.usable_fraction||0)*100,0)}% assumed usable. Building height {c.building_height_m} m ({c.height_basis}). Windows, facade trim and parapets are illustrative, not surveyed. Flat roof geometry is illustrative; roof shape, load capacity, obstacles, existing solar and shading require a survey. Parking structures use the top deck only. Canopies use shared bays, 6 m concept driving aisles and at least 4.5 m modeled clearance. Alignment follows the footprint, not surveyed parking stalls. Supports and circulation require engineering.</p>}
+    <p className="studio-disclaimer">Equipment follows map elevation tiles when available. Satellite imagery locates the site; it does not verify buildable land. Terrain grading, habitat, parcels, setbacks, {solar?'shading':'wind direction and wake losses'}, and grid routing need site design. Equipment is generic; lighting and rotor motion are illustrative.</p>
+   </aside>
+  </div>:<div key="economics" className="economics-workspace">
+   <div className="economics-main"><div className="finance-heading"><span className="overline">THE PROJECT CASE / {number(layout.capacityMW,2)} MW</span><h3>What could this site return?</h3><p>Editable, pre-tax project economics. Constant 2024 USD, no financing or tax incentives.</p></div>
+    <div className="finance-metrics"><div><span><Coins size={14}/>Upfront investment</span><strong>{money(finance.investment)}</strong><small>Construction + contingency + allowance</small></div><div><span><Zap size={14}/>Annual operating cash</span><strong>{money(finance.firstYearCash)}</strong><small>Year-one energy revenue minus O&M</small></div><div className={finance.npv>=0?'positive':'negative'}><span><ChartNoAxesCombined size={14}/>{inputs.years}-year NPV</span><strong>{money(finance.npv)}</strong><small>At {inputs.discountPct}% real discount rate</small></div><div><span>Simple payback</span><strong>{finance.payback===null?'Not reached':`${number(finance.payback)} yr`}</strong><small>{finance.payback===null?`Within the ${inputs.years}-year scenario`:'Undiscounted cumulative cash flow'}</small></div></div>
+    <section className="cashflow-card"><div><h4>From investment to return</h4><span>Cumulative cash · undiscounted</span></div><svg viewBox="0 0 700 205" role="img" aria-label={`Cumulative cash starts at ${money(-finance.investment)} and ends at ${money(rows[rows.length-1].cumulative)} after ${inputs.years} years`}><line x1="35" x2="660" y1={y(0)} y2={y(0)} stroke="#859983" strokeDasharray="4 5"/><text x="665" y={y(0)+3} fill="#8da18f" fontSize="9">$0</text><path d={`${path} L660,180 L35,180 Z`} fill="#bfdc8710"/><path d={path} fill="none" stroke={finance.npv>=0?'#c5e99a':'#dab276'} strokeWidth="2.5"/><circle cx="35" cy={y(-finance.investment)} r="4" fill="#dab276"/><circle cx="660" cy={y(rows[rows.length-1].cumulative)} r="4" fill="#c5e99a"/><text x="35" y="199" fill="#8da18f" fontSize="10">Year 0</text><text x="610" y="199" fill="#8da18f" fontSize="10">Year {inputs.years}</text><text x="35" y="18" fill="#b1c3ad" fontSize="10">{money(high)}</text><text x="35" y="180" fill="#b1c3ad" fontSize="10">{money(low)}</text></svg></section>
+    <div className="benefit-grid"><section><Zap size={19}/><span>Energy cost</span><strong>{finance.lcoe===null?'—':`$${number(finance.lcoe)}`}<small>/ MWh</small></strong><p>Discounted lifetime cost / discounted lifetime energy.</p></section><section><Sun size={19}/><span>Lifetime generation</span><strong>{number(finance.lifetimeMWh/(urban?1000:1e6),2)}<small>{urban?'GWh':'TWh'}</small></strong><p>Includes the selected degradation and extra curtailment.</p></section><section><Leaf size={19}/><span>Potential avoided emissions</span><strong>{number(finance.avoidedTonnes/1000)}<small>kt CO₂ / yr</small></strong><p>Scenario at {inputs.carbonTonnesPerMWh} t/MWh displaced. Not a measured reduction.</p></section></div>
+    <div className="cost-breakdown"><h4>What goes into the number</h4>{[[urban?'Scenario construction':'Benchmark construction',finance.construction],['Construction contingency',finance.contingency],['Extra site / grid allowance',inputs.extraMillions*1e6],['Year-one energy revenue',finance.annualRevenue],['Annual operating cost',finance.om],['End-of-life provision (final year)',finance.decommission]].map(([label,value])=><div key={String(label)}><span>{label}</span><b>{money(Number(value))}</b></div>)}</div>
+    {urban?<p className="finance-source">Urban construction defaults are editable assumptions: rooftop $3,000/kW AC; parking structures and canopies $4,000/kW AC, in constant 2024 USD. They are not a quote or a sourced rooftop benchmark. Structural reinforcement, roof replacement, parking access, electrical upgrades and retail bill savings need a site-specific estimate. Final-year decommissioning assumes 5% of construction cost.</p>:<p className="finance-source">Construction starts from <a href={COST_SOURCE.url} target="_blank" rel="noreferrer">EIA’s 2024 installed-project averages</a> (published July 2026): solar $1,865/kW; wind $1,882/kW. All other defaults are scenario assumptions, not market quotes. O&M includes routine operations; no double-counted annual land line is added. The final year includes a 5% construction-cost decommissioning provision.</p>}
+    <div className="studio-note"><Info size={16}/><p>{demo?'This is a synthetic demonstration site. ':''}Generation is scaled from the selected site’s screening estimate to the concept capacity; spacing does not run a new energy simulation. No site-specific PPA, interconnection study, tax assessment, or lender model is included. No battery, subsidy, debt, tax, inflation, or price escalation is modeled.</p></div>
+   </div><aside className="finance-assumptions"><div className="assumptions-heading"><h4>Build your scenario</h4><button aria-label="Reset financial assumptions" onClick={()=>setInputs(defaultFinance(c.technology,c.surface_type))}><RotateCcw size={15}/></button></div><p>Change an assumption. See the case update.</p>
+    {field('pricePerMWh','Energy sale price','$/MWh',0,300,1)}
+    {field('capexPerKW','Construction cost','$/kW',0,10000,25)}
+    {field('omPerKW','Annual O&M','$/kW-yr',0,250,1)}
+    {field('contingencyPct','Construction contingency','%',0,50,1)}
+    {field('extraMillions','Extra site / grid allowance','$m',0,1000,.5)}
+    {field('discountPct','Real discount rate','%',0,25,.5)}
+    {field('years','Project life','years',5,50,1)}
+    {field('degradationPct','Annual output degradation','%',0,5,.1)}
+    {field('curtailmentPct','Additional curtailment','%',0,50,1)}
+    {field('carbonTonnesPerMWh','Displaced grid emissions','t/MWh',0,1.5,.05)}
+    <p className="assumptions-note">Grid proximity does not identify upgrade cost. Add an allowance only when you have a basis for it. Defaults exclude unpriced site-specific additions.</p>
+   </aside>
+  </div>}
+ </div>;
+}

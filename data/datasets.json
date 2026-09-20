@@ -1,0 +1,222 @@
+[
+  {
+    "id": "worldcover",
+    "name": "ESA WorldCover",
+    "provider": "ESA WorldCover Consortium",
+    "sensor": "Sentinel-1 / Sentinel-2",
+    "space_derived": true,
+    "access_method": "Earth Engine",
+    "asset_id": "ESA/WorldCover/v200",
+    "resolution_m": 10,
+    "vintage": "2021 · v200",
+    "variables": [
+      "Map"
+    ],
+    "metrics": [
+      "land cover",
+      "developed land",
+      "environment"
+    ],
+    "energy_types": [
+      "solar",
+      "wind"
+    ],
+    "coverage": "Global",
+    "source_url": "https://developers.google.com/earth-engine/datasets/catalog/ESA_WorldCover_v200",
+    "description": "Sentinel-derived land-cover classification used for developed-land fraction, natural habitat fraction and water/wetland exclusions.",
+    "limitations": "Static 2021 land cover is not current construction status. A built-up pixel is not a verified available rooftop.",
+    "license": "CC BY 4.0"
+  },
+  {
+    "id": "srtm",
+    "name": "NASA SRTM",
+    "provider": "NASA / USGS / JPL",
+    "sensor": "Space Shuttle Endeavour",
+    "space_derived": true,
+    "access_method": "Earth Engine",
+    "asset_id": "USGS/SRTMGL1_003",
+    "resolution_m": 30,
+    "vintage": "February 2000 · v3",
+    "variables": [
+      "elevation"
+    ],
+    "metrics": [
+      "slope",
+      "terrain",
+      "buildability"
+    ],
+    "energy_types": [
+      "solar",
+      "wind"
+    ],
+    "coverage": "60°N–56°S",
+    "source_url": "https://developers.google.com/earth-engine/datasets/catalog/USGS_SRTMGL1_003",
+    "description": "Radar elevation model. Terrain slope is computed deterministically in degrees for infrastructure screening.",
+    "limitations": "Terrain dates to 2000. Cell mean slope can hide small steep areas; not a geotechnical assessment.",
+    "license": "Public domain"
+  },
+  {
+    "id": "viirs",
+    "name": "VIIRS Nighttime Lights",
+    "provider": "EOG / NOAA",
+    "sensor": "Suomi NPP · VIIRS DNB",
+    "space_derived": true,
+    "access_method": "Earth Engine",
+    "asset_id": "NOAA/VIIRS/DNB/MONTHLY_V1/VCMSLCFG",
+    "resolution_m": 464,
+    "vintage": "Selected analysis period · monthly v1",
+    "variables": [
+      "avg_rad",
+      "cf_cvg"
+    ],
+    "metrics": [
+      "nighttime radiance",
+      "activity context"
+    ],
+    "energy_types": [
+      "solar",
+      "wind"
+    ],
+    "coverage": "Global",
+    "source_url": "https://developers.google.com/earth-engine/datasets/catalog/NOAA_VIIRS_DNB_MONTHLY_V1_VCMSLCFG",
+    "description": "Cloud-coverage-masked monthly nighttime radiance provides activity context alongside candidate screening.",
+    "limitations": "Radiance is not electricity demand. Transient lighting and artifacts remain possible.",
+    "license": "Public domain"
+  },
+  {
+    "id": "power",
+    "name": "NASA POWER Solar",
+    "provider": "NASA Langley POWER",
+    "sensor": "Satellite + atmospheric models",
+    "space_derived": true,
+    "access_method": "REST API",
+    "asset_id": null,
+    "resolution_m": 100000,
+    "vintage": "API climatology period returned per request",
+    "variables": [
+      "ALLSKY_SFC_SW_DWN"
+    ],
+    "metrics": [
+      "irradiance",
+      "solar resource"
+    ],
+    "energy_types": [
+      "solar"
+    ],
+    "coverage": "Global",
+    "source_url": "https://power.larc.nasa.gov/docs/services/api/",
+    "description": "All-sky surface shortwave downward irradiance climatology, used as a coarse screening proxy for solar generation.",
+    "limitations": "Coarse satellite/model product. Not parcel-scale irradiance or a bankable yield study. Resolution varies by parameter.",
+    "license": "NASA open data"
+  },
+  {
+    "id": "era5",
+    "name": "ERA5 Wind Reanalysis",
+    "provider": "ECMWF / Copernicus C3S",
+    "sensor": "Atmospheric reanalysis",
+    "space_derived": false,
+    "access_method": "Earth Engine",
+    "asset_id": "ECMWF/ERA5/HOURLY",
+    "resolution_m": 27830,
+    "vintage": "Selected analysis period · hourly",
+    "variables": [
+      "u_component_of_wind_100m",
+      "v_component_of_wind_100m"
+    ],
+    "metrics": [
+      "wind resource",
+      "100 m wind speed"
+    ],
+    "energy_types": [
+      "wind"
+    ],
+    "coverage": "Global",
+    "source_url": "https://developers.google.com/earth-engine/datasets/catalog/ECMWF_ERA5_HOURLY",
+    "description": "Compute sqrt(u100² + v100²) for each hour, then average wind speed over the requested period. Resource fallback for the NREL WIND Toolkit.",
+    "limitations": "Modeled reanalysis, not direct satellite wind measurement. Mean wind and an illustrative capacity-factor curve do not replace a turbine power-curve study.",
+    "license": "Copernicus license"
+  },
+  {
+    "id": "hifld",
+    "name": "HIFLD Transmission",
+    "provider": "DHS HIFLD / ORNL; DataLumos archive",
+    "sensor": "Terrestrial infrastructure",
+    "space_derived": false,
+    "access_method": "Regional GeoJSON",
+    "asset_id": null,
+    "resolution_m": null,
+    "vintage": "2025-02-19 archived inventory",
+    "variables": [
+      "transmission line geometry"
+    ],
+    "metrics": [
+      "grid distance"
+    ],
+    "energy_types": [
+      "solar",
+      "wind"
+    ],
+    "coverage": "United States",
+    "source_url": "https://www.datalumos.org/datalumos/project/240591/version/V1/view",
+    "description": "Nearest mapped transmission line distance, computed in a local azimuthal equidistant projection.",
+    "limitations": "Historic infrastructure inventory. Proximity does not prove connection availability, voltage suitability or spare capacity.",
+    "license": "See source metadata"
+  },
+  {
+    "id": "padus",
+    "name": "PAD-US Protected Areas",
+    "provider": "USGS GAP",
+    "sensor": "Terrestrial boundaries",
+    "space_derived": false,
+    "access_method": "Regional GeoJSON",
+    "asset_id": null,
+    "resolution_m": null,
+    "vintage": "4.1",
+    "variables": [
+      "protected polygons"
+    ],
+    "metrics": [
+      "protected overlap",
+      "environmental exclusion"
+    ],
+    "energy_types": [
+      "solar",
+      "wind"
+    ],
+    "coverage": "United States",
+    "source_url": "https://www.usgs.gov/programs/gap-analysis-project/science/pad-us-data-download",
+    "description": "Union protected-area geometries and calculate footprint overlap. Any positive overlap is excluded when protection is enabled.",
+    "limitations": "Conservative screening uses Fee, Designation, Easement and Marine polygons regardless of GAP status. Proclamation/planning outlines are omitted. Overlap is not a legal siting determination; local restrictions still need review.",
+    "license": "Public domain"
+  },
+  {
+    "id": "landsat",
+    "name": "Landsat 9 Surface Products",
+    "provider": "USGS / NASA",
+    "sensor": "Landsat 9 · OLI-2 / TIRS-2",
+    "space_derived": true,
+    "access_method": "Earth Engine",
+    "asset_id": "LANDSAT/LC09/C02/T1_L2",
+    "resolution_m": 30,
+    "vintage": "2021–present · Collection 2 L2",
+    "variables": [
+      "SR_B4",
+      "SR_B5",
+      "ST_B10",
+      "QA_PIXEL"
+    ],
+    "metrics": [
+      "vegetation",
+      "surface temperature"
+    ],
+    "energy_types": [
+      "solar",
+      "wind"
+    ],
+    "coverage": "Global land",
+    "source_url": "https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LC09_C02_T1_L2",
+    "description": "Optional optical and surface-temperature cross-check; VIIRS supplies the additional orbital layer in the MVP pipeline.",
+    "limitations": "Not computed by the current pipeline. Requires QA masking and scale/offset conversion before use.",
+    "license": "Public domain"
+  }
+]

@@ -1,0 +1,32 @@
+{
+  "name": "powershift",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run",
+    "start": "node scripts/start.mjs",
+    "start:dev": "node scripts/start.mjs --dev"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
+    "lucide-react": "^0.468.0",
+    "maplibre-gl": "5.24.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-react": "^5.0.3",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.7",
+    "vitest": "^3.2.4"
+  }
+}
