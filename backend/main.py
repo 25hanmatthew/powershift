@@ -15,6 +15,7 @@ from .models import Plan, RerankRequest, REGIONS
 from .cache import Cache, analysis_key
 from .demo import candidates as demo_candidates
 from .scoring import rank_candidates
+from .operating_evidence import DATASETS as OPERATING_DATASETS
 from .services import REGISTRY, Elastic, planner, service_status, openai_json, transcription_session
 from .earth import analyze
 from .ml.runtime import enrich as enrich_historical, status as historical_status
@@ -34,7 +35,13 @@ def health(): return {'status':'ok',**service_status()}
 def intelligence(): return historical_status()
 
 @app.get('/api/datasets')
-def datasets(): return [*REGISTRY,OSM_DATASET]
+def datasets(): return [*REGISTRY,OSM_DATASET,*OPERATING_DATASETS]
+
+@app.get('/api/wind-fleet')
+def wind_fleet():
+    path=Path(__file__).resolve().parent.parent/'data/public/wind-fleet-2024.json'
+    if not path.is_file(): raise HTTPException(503,'The audited ISD/PUDL replay has not been exported.')
+    return FileResponse(path,media_type='application/json',headers={'Cache-Control':'no-cache'})
 
 @app.get('/api/regions')
 def regions(): return REGIONS
@@ -72,6 +79,8 @@ async def urban_search(request:UrbanRequest):
         'explanation':summary['note'],'telemetry':[{'stage':'analysis','provider':'OpenStreetMap / NASA POWER / local HIFLD & PAD-US','status':'cached footprints' if summary['cache_hit'] else 'computed','earth_engine_executions':0}],
         'mode':'live','cache_hit':summary['cache_hit'],'analysis_timestamp':summary['retrieved_at'],'generated_at':now,
         'duration_ms':round((time.perf_counter()-started)*1000),'data_notice':'Mapped urban surfaces · structural suitability unverified','urban_summary':summary}
+    if (output.get('operating_evidence') or {}).get('plant_count'):
+        output['datasets'] += [d for d in OPERATING_DATASETS if d['id'] not in {s['id'] for s in output['datasets']}]
     Cache().set('run:'+run_id,{'result':output,'physical':physical})
     return output
 
@@ -91,6 +100,8 @@ async def city_search(request:CitySearchRequest):
         'explanation':summary['note'],'telemetry':[{'stage':'analysis','provider':'U.S. Census / OpenStreetMap / NASA POWER / Earth Engine / HIFLD / PAD-US' if city.get('scope')=='regional' else 'U.S. Census / Earth Engine / HIFLD / PAD-US' if plan.technology=='wind' else 'U.S. Census / OpenStreetMap / NASA POWER / HIFLD / PAD-US','status':'live city screening','earth_engine_executions':summary.get('earth_engine_executions',0)}],
         'mode':'live','cache_hit':summary['cache_hit'],'analysis_timestamp':summary['retrieved_at'],'generated_at':now,
         'duration_ms':round((time.perf_counter()-started)*1000),'data_notice':f"LIVE · {city['name']}, {city['state']} · {str(city['radius_km'])+' km regional radius' if city.get('scope')=='regional' else 'within city boundary'}"}
+    if (output.get('operating_evidence') or {}).get('plant_count'):
+        output['datasets'] += [d for d in OPERATING_DATASETS if d['id'] not in {s['id'] for s in output['datasets']}]
     Cache().set('run:'+run_id,{'result':output,'physical':physical})
     return output
 
@@ -147,6 +158,8 @@ async def perform(run_id, incoming, queue):
         if plan.historical_intelligence:
             telemetry.append({'stage':'rank','provider':'Historical Intelligence','status':f"{sum(c['ml_enabled'] for c in enriched)} corrections applied"})
         await progress(4,'Verifying the portfolio and attaching evidence')
+        if (result.get('operating_evidence') or {}).get('plant_count'):
+            sources += [d for d in OPERATING_DATASETS if d['id'] not in {s['id'] for s in sources}]
         narrative='\n\n'.join(s['description']+' Limitations: '+s['limitations'] for s in sources)
         rationale=explanation(result); verification_note=None
         if plan.mode=='live' and os.getenv('OPENAI_API_KEY'):
@@ -178,7 +191,7 @@ async def perform(run_id, incoming, queue):
         if cached and cached['data'] and all(c.get('provenance')=='computed' for c in cached['data']):
             fallback=rank_candidates(enrich_historical(cached['data'],safe_plan),safe_plan)
             used_ids={id for c in cached['data'] for id in c['evidence_ids']}
-            output={**fallback,'run_id':run_id,'plan':safe_plan.model_dump(),'datasets':[s for s in REGISTRY if s['id'] in used_ids],
+            output={**fallback,'run_id':run_id,'plan':safe_plan.model_dump(),'datasets':[s for s in [*REGISTRY,*OPERATING_DATASETS] if s['id'] in used_ids],
                 'explanation':explanation(fallback),'telemetry':telemetry+[{'stage':'analysis','provider':'Local computed cache','status':'stale fallback after service failure','earth_engine_executions':0}],
                 'model_audit':None,'mode':'live','cache_hit':True,'stale':True,'analysis_timestamp':cached['created_at'],
                 'generated_at':datetime.now(timezone.utc).isoformat(),'duration_ms':round((time.perf_counter()-started)*1000),

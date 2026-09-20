@@ -3,6 +3,7 @@ from math import asin, cos, radians, sin, sqrt
 from shapely.geometry import Point, shape, box
 from .models import Plan, REGIONS
 from .ml.runtime import apply_correction
+from . import operating_evidence
 
 def haversine(a, b):
     lon1, lat1, lon2, lat2 = map(radians, [*a, *b])
@@ -41,9 +42,13 @@ def rank_candidates(candidates, plan: Plan):
     if total == 0:
         weights = {k: 1 for k in weights}
         total = len(weights)
+    evidence_data = operating_evidence.load() if plan.mode == 'live' else None
     eligible, excluded = [], []
     for raw in candidates:
         c = apply_correction(raw, plan.historical_intelligence)
+        original_resource = c['components']['resource']
+        c = operating_evidence.apply_policy(c, plan, evidence_data)
+        c['score_before_operating'] = round((sum(c['components'][k]*v for k,v in weights.items()) + (original_resource-c['components']['resource'])*weights['resource']) / total, 2)
         reasons = exclusions(c, plan)
         if reasons:
             excluded.append({**c, 'exclusion_reasons': reasons})
@@ -64,6 +69,7 @@ def rank_candidates(candidates, plan: Plan):
     chosen = [c for c in eligible if c['selected']]
     return {
         'candidates': eligible, 'excluded': excluded, 'selected_ids': selected,
+        'operating_evidence': operating_evidence.summary(plan, evidence_data),
         'portfolio': {'capacity_mw': round(capacity, 2), 'target_mw': plan.target_mw,
             'target_met': capacity >= plan.target_mw, 'shortfall_mw': round(max(0, plan.target_mw-capacity), 2),
             'site_count': len(chosen), 'solar_mw': round(sum(c['capacity_mw'] for c in chosen if c['technology']=='solar'), 2),

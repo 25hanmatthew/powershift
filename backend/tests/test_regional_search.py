@@ -77,7 +77,7 @@ def test_real_source_union_exclusions_and_unique_capacity(regional_data):
         assert 'Overlaps a screened urban surface' in excluded['overlap']['exclusion_reasons']
         assert 'Protected land' in excluded['protected']['exclusion_reasons']
         assert len(data['urban_summary']['comparison'])==4
-        assert {d['id'] for d in data['datasets']}=={'osm-urban','power','era5','srtm','viirs','worldcover','hifld','padus'}
+        assert {d['id'] for d in data['datasets']}=={'osm-urban','power','era5','srtm','viirs','worldcover','hifld','padus','isd','pudl'}
         assert '40 km regional radius' in data['data_notice']
         assert not data['cache_hit'] and data['telemetry'][0]['earth_engine_executions']==1
         again=client.post('/api/city/search',json={'query':QUERY}).json()

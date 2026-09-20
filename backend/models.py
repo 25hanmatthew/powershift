@@ -29,6 +29,7 @@ class Plan(BaseModel):
     mode: Literal['demo', 'live'] = 'demo'
     start_date: str = '2024-01-01'
     end_date: str = '2025-01-01'
+    use_operating_evidence: bool = True
     historical_intelligence: bool = False
 
     @model_validator(mode='after')
@@ -52,6 +53,7 @@ class Plan(BaseModel):
         return self
 
 class RerankRequest(BaseModel):
+    use_operating_evidence: bool = True
     historical_intelligence: bool = False
     weights: Weights
     constraints: Constraints

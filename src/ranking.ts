@@ -13,6 +13,13 @@ export function rerank(source: Result, plan: Plan): Result {
    c.components.resource=Math.round(Math.max(0,Math.min(100,(c.ml_corrected_expected_cf/.075-1)*20))*100)/100;
    c.annual_gwh=Math.round(c.capacity_mw*8760*c.ml_corrected_expected_cf/100)/10;
   }
+  c.score_before_operating=Math.round(keys.reduce((n,k)=>n+c.components[k]*(total?plan.weights[k]:1),0)/(total||keys.length)*100)/100;
+  if(c.operating_evidence){
+   const e={...c.operating_evidence};e.applied=plan.mode==='live'&&c.provenance==='computed'&&plan.use_operating_evidence!==false&&c.technology==='wind'&&e.available&&e.weather_downside_share!=null;
+   e.resource_before=c.components.resource;
+   if(e.applied)c.components.resource=Math.round(c.components.resource*(1-e.weather_downside_share!)*100)/100;
+   e.resource_after=c.components.resource;c.operating_evidence=e;
+  }
   if(raw.exclusion_reasons?.includes('Outside analysis boundary')) reasons.push('Outside analysis boundary');
   if(plan.technology!=='auto' && c.technology!==plan.technology) reasons.push('Technology filter');
   if(plan.constraints.exclude_protected && c.protected_overlap_pct>0) reasons.push('Protected land');

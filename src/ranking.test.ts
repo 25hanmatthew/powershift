@@ -7,6 +7,22 @@ const fixture=(id:string,overrides:Partial<Candidate>={}):Candidate=>({id,site_i
 const source=(candidates:Candidate[])=>({candidates,excluded:[],selected_ids:[],plan:DEFAULT_PLAN} as unknown as Result);
 
 describe('instant ranking',()=>{
+ it('uses regional ISD/PUDL evidence to change selection and restores exactly when disabled',()=>{
+  const evidence={policy:'v1',year:2024,radius_km:100,plant_count:3,complete_plants:3,plant_months:36,available:true,weather_downside_share:.2,reason:'test',plant_ids:[1,2,3],applied:true,resource_before:90,resource_after:72};
+  const wind=fixture('wind',{technology:'wind',provenance:'computed',operating_evidence:evidence,components:{resource:90,environment:80,grid:80,buildability:80,reuse:80}});
+  const solar=fixture('solar',{components:{resource:80,environment:80,grid:80,buildability:80,reuse:80}});
+  const plan={...DEFAULT_PLAN,mode:'live' as const,target_mw:80,weights:{resource:100,environment:0,grid:0,buildability:0,reuse:0}};
+  const adjusted=rerank(source([wind,solar]),plan);
+  expect(adjusted.selected_ids).toEqual(['solar']);
+  const rankedWind=adjusted.candidates.find(c=>c.id==='wind')!;
+  expect(rankedWind.score).toBe(72);expect(rankedWind.score_before_operating).toBe(90);
+  expect(rankedWind.annual_gwh).toBe(wind.annual_gwh);
+  expect(rerank(adjusted,plan).candidates.find(c=>c.id==='wind')?.score).toBe(72);
+  const off=rerank(adjusted,{...plan,use_operating_evidence:false});
+  expect(off.selected_ids).toEqual(['wind']);expect(off.candidates[0].score).toBe(90);
+  expect(wind.components.resource).toBe(90);
+ });
+
  it('preserves regional resource and overlapping-surface exclusions when filters change',()=>{
   const input=source([fixture('safe'),fixture('overlap',{screening_reasons:['Overlaps a screened urban surface']}),fixture('calm',{technology:'wind',screening_reasons:['Mean wind below 5.8 m/s']})]);
   const result=rerank(input,{...DEFAULT_PLAN,constraints:{...DEFAULT_PLAN.constraints,exclude_protected:false,max_grid_km:100}});
